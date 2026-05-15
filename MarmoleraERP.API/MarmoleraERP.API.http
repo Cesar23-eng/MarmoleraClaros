@@ -1,0 +1,6 @@
+@MarmoleraERP.API_HostAddress = http://localhost:5183
+
+GET {{MarmoleraERP.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
