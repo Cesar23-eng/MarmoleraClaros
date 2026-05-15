@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:marmolera_app/core/routes/app_routes.dart';
 import 'package:marmolera_app/features/auth/services/auth_service.dart';
 import 'package:marmolera_app/core/theme/app_theme.dart';
 import 'package:marmolera_app/core/exceptions/auth_exception.dart';
-import 'package:marmolera_app/features/ventas/screens/ventas_dashboard.dart';
-import 'package:marmolera_app/features/fabrica/screens/fabrica_dashboard.dart';
-import 'package:marmolera_app/features/dashboards/finanzas_dashboard.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -74,44 +72,67 @@ class _LoginScreenState extends State<LoginScreen>
 
       if (!mounted) return;
 
-      Widget destination;
-      switch (role.toLowerCase()) {
-        case 'ventas':
-          destination = const VentasDashboard();
-          break;
-        case 'fabrica':
-        case 'produccion': // por si la API devuelve 'Produccion'
-          destination = const FabricaDashboard();
-          break;
-        case 'finanzas':
-          destination = const FinanzasDashboard();
-          break;
-        default:
-          setState(() {
-            _errorMessage = 'Rol desconocido: "$role". Contacta al administrador.';
-            _isLoading = false;
-          });
-          return;
+      // ── Routing por rol ────────────────────────────────────────────
+      final String? ruta = _rutaPorRol(role.toLowerCase().trim());
+
+      if (ruta == null) {
+        setState(() {
+          _errorMessage =
+              'Rol desconocido: "$role". Contacta al administrador.';
+          _isLoading = false;
+        });
+        return;
       }
 
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => destination,
-          transitionsBuilder: (_, anim, __, child) => FadeTransition(
-            opacity: anim,
-            child: child,
-          ),
-          transitionDuration: const Duration(milliseconds: 400),
-        ),
-      );
+      await Navigator.pushReplacementNamed(context, ruta);
     } on AuthException catch (e) {
       setState(() {
         _errorMessage = e.message;
         _isLoading = false;
       });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error inesperado. Intenta de nuevo.';
+        _isLoading = false;
+      });
     }
   }
+
+  /// Devuelve la ruta nombrada según el rol recibido de la API.
+  String? _rutaPorRol(String rol) {
+    switch (rol) {
+      // ── Ventas ───────────────────────────────────────────────
+      case 'ventas':
+        return AppRoutes.ventas;
+
+      // ── Fábrica / Producción ─────────────────────────────────────
+      case 'fabrica':
+      case 'produccion':
+      case 'fábrica':
+        return AppRoutes.fabrica;
+
+      // ── Contabilidad / Finanzas ────────────────────────────────
+      case 'finanzas':
+      case 'contabilidad':
+        return AppRoutes.finanzas;
+
+      // ── Gerencia (acceso total) ────────────────────────────────
+      case 'gerencia':
+      case 'admin':
+      case 'administrador':
+        return AppRoutes.gerencia;
+
+      // ── Tablet (solo subir órdenes) ─────────────────────────────
+      case 'tablet':
+      case 'escaneo':
+        return AppRoutes.tablet;
+
+      default:
+        return null;
+    }
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -128,15 +149,12 @@ class _LoginScreenState extends State<LoginScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // — Logo de la Empresa —
                     Image.asset(
                       'assets/logo.png',
-                      height: 140, // Un tamaño adecuado para destacar
+                      height: 140,
                       fit: BoxFit.contain,
                     ),
                     const SizedBox(height: 24),
-
-                    // — Título principal —
                     Text(
                       'Marmolera Claros',
                       style: GoogleFonts.poppins(
@@ -158,14 +176,11 @@ class _LoginScreenState extends State<LoginScreen>
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 48),
-
-                    // — Formulario —
                     Form(
                       key: _formKey,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Campo correo
                           TextFormField(
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
@@ -186,8 +201,6 @@ class _LoginScreenState extends State<LoginScreen>
                             },
                           ),
                           const SizedBox(height: 20),
-
-                          // Campo contraseña
                           TextFormField(
                             controller: _passwordController,
                             obscureText: _obscurePassword,
@@ -218,8 +231,6 @@ class _LoginScreenState extends State<LoginScreen>
                             onFieldSubmitted: (_) => _handleLogin(),
                           ),
                           const SizedBox(height: 12),
-
-                          // Mensaje de error
                           AnimatedSwitcher(
                             duration: const Duration(milliseconds: 300),
                             child: _errorMessage != null
@@ -249,8 +260,6 @@ class _LoginScreenState extends State<LoginScreen>
                                 : const SizedBox.shrink(),
                           ),
                           const SizedBox(height: 16),
-
-                          // Botón Ingresar
                           ElevatedButton(
                             onPressed: _isLoading ? null : _handleLogin,
                             child: _isLoading
@@ -259,9 +268,9 @@ class _LoginScreenState extends State<LoginScreen>
                                     width: 22,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2.5,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
-                                      ),
+                                      valueColor:
+                                          AlwaysStoppedAnimation<Color>(
+                                              Colors.white),
                                     ),
                                   )
                                 : const Text('Ingresar'),
@@ -269,7 +278,6 @@ class _LoginScreenState extends State<LoginScreen>
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 48),
                     const Text(
                       '© 2026 Marmolera Claros',
