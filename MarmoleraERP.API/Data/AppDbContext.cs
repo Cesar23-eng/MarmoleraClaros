@@ -6,6 +6,11 @@ using MarmoleraERP.API.Modules.Ventas.Entities;
 using MarmoleraERP.API.Modules.Catalogo.Entities;
 using MarmoleraERP.API.Modules.Ventas.Enums;
 using MarmoleraERP.API.Modules.Catalogo.Enums;
+using MarmoleraERP.API.Modules.Ordenes.Entities;
+using MarmoleraERP.API.Modules.Calendario.Entities;
+using MarmoleraERP.API.Modules.Calendario.Enums;
+using MarmoleraERP.API.Modules.Notificaciones.Entities;
+using MarmoleraERP.API.Modules.Notificaciones.Enums;
 
 namespace MarmoleraERP.API.Data;
 
@@ -14,18 +19,22 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
     // ─── DbSets ──────────────────────────────────────────────────────────────
-    public DbSet<Cliente> Clientes => Set<Cliente>();
-    public DbSet<Material> Materiales => Set<Material>();
-    public DbSet<ServicioExtra> ServiciosExtras => Set<ServicioExtra>();
-    public DbSet<Pedido> Pedidos => Set<Pedido>();
-    public DbSet<DetallePedidoGeometria> DetallesGeometria => Set<DetallePedidoGeometria>();
-    public DbSet<DetallePedidoExtra> DetallesExtras => Set<DetallePedidoExtra>();
-    public DbSet<Cotizacion>       Cotizaciones     => Set<Cotizacion>();
-    public DbSet<DetalleCotizacion> DetallesCotizacion => Set<DetalleCotizacion>();
+    public DbSet<Cliente>               Clientes              => Set<Cliente>();
+    public DbSet<Material>              Materiales            => Set<Material>();
+    public DbSet<ServicioExtra>         ServiciosExtras       => Set<ServicioExtra>();
+    public DbSet<Pedido>                Pedidos               => Set<Pedido>();
+    public DbSet<DetallePedidoGeometria> DetallesGeometria    => Set<DetallePedidoGeometria>();
+    public DbSet<DetallePedidoExtra>    DetallesExtras        => Set<DetallePedidoExtra>();
+    public DbSet<Cotizacion>            Cotizaciones          => Set<Cotizacion>();
+    public DbSet<DetalleCotizacion>     DetallesCotizacion    => Set<DetalleCotizacion>();
+    // ── Nuevos módulos ────────────────────────────────────────────────────────
+    public DbSet<OrdenEscaneada>        OrdenesEscaneadas     => Set<OrdenEscaneada>();
+    public DbSet<EventoCalendario>      EventosCalendario     => Set<EventoCalendario>();
+    public DbSet<Notificacion>          Notificaciones        => Set<Notificacion>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
-        base.OnModelCreating(builder); // Requerido para Identity
+        base.OnModelCreating(builder);
 
         // ─── Cliente ─────────────────────────────────────────────────────────
         builder.Entity<Cliente>(e =>
@@ -60,14 +69,14 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         {
             e.HasKey(p => p.Id);
             e.Property(p => p.Estado)
-             .HasConversion<string>()   // Guarda el enum como texto legible
+             .HasConversion<string>()
              .HasMaxLength(30);
             e.Property(p => p.TotalFinal).HasPrecision(18, 4);
 
             e.HasOne(p => p.Cliente)
              .WithMany(c => c.Pedidos)
              .HasForeignKey(p => p.ClienteId)
-             .OnDelete(DeleteBehavior.Restrict); // No eliminar cliente con pedidos
+             .OnDelete(DeleteBehavior.Restrict);
         });
 
         // ─── DetallePedidoGeometria ───────────────────────────────────────────
@@ -111,10 +120,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
              .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ─── Seed Roles ──────────────────────────────────────────────────────
-        SeedRoles(builder);
-
-        // ─── Cotizacion (cabecera) ────────────────────────────────────────────
+        // ─── Cotizacion ───────────────────────────────────────────────────────
         builder.Entity<Cotizacion>(e =>
         {
             e.HasKey(c => c.Id);
@@ -122,7 +128,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             e.Property(c => c.PrecioTotal).HasPrecision(18, 4);
             e.Property(c => c.Estado).IsRequired().HasMaxLength(20).HasDefaultValue("Cotizado");
             e.Property(c => c.Comentarios).HasMaxLength(500);
-            e.Property(c => c.FechaAprobacion).IsRequired(false); // NULL hasta que sea aprobada
+            e.Property(c => c.FechaAprobacion).IsRequired(false);
 
             e.HasOne(c => c.Cliente)
              .WithMany()
@@ -144,8 +150,51 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             e.HasOne(d => d.Cotizacion)
              .WithMany(c => c.Detalles)
              .HasForeignKey(d => d.CotizacionId)
-             .OnDelete(DeleteBehavior.Cascade); // Al eliminar la cabecera se eliminan sus detalles
+             .OnDelete(DeleteBehavior.Cascade);
         });
+
+        // ─── OrdenEscaneada ───────────────────────────────────────────────────
+        builder.Entity<OrdenEscaneada>(e =>
+        {
+            e.HasKey(o => o.Id);
+            e.Property(o => o.RutaArchivo).IsRequired().HasMaxLength(500);
+            e.Property(o => o.NombreArchivo).IsRequired().HasMaxLength(255);
+            e.Property(o => o.TipoContenido).HasMaxLength(100);
+            e.Property(o => o.UsuarioId).HasMaxLength(450);
+
+            e.HasOne(o => o.Pedido)
+             .WithMany()
+             .HasForeignKey(o => o.PedidoId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ─── EventoCalendario ─────────────────────────────────────────────────
+        builder.Entity<EventoCalendario>(e =>
+        {
+            e.HasKey(ev => ev.Id);
+            e.Property(ev => ev.Tipo).HasConversion<string>().HasMaxLength(30);
+            e.Property(ev => ev.Notas).HasMaxLength(500);
+            e.Property(ev => ev.UsuarioId).IsRequired().HasMaxLength(450);
+            e.Property(ev => ev.MotivoReprogramacion).HasMaxLength(500);
+
+            e.HasOne(ev => ev.Pedido)
+             .WithMany()
+             .HasForeignKey(ev => ev.PedidoId)
+             .IsRequired(false)
+             .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ─── Notificacion ─────────────────────────────────────────────────────
+        builder.Entity<Notificacion>(e =>
+        {
+            e.HasKey(n => n.Id);
+            e.Property(n => n.Tipo).HasConversion<string>().HasMaxLength(40);
+            e.Property(n => n.Mensaje).IsRequired().HasMaxLength(500);
+            e.Property(n => n.DestinoRol).IsRequired().HasMaxLength(50);
+        });
+
+        // ─── Seed Roles ───────────────────────────────────────────────────────
+        SeedRoles(builder);
     }
 
     private static void SeedRoles(ModelBuilder builder)
@@ -156,6 +205,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             new IdentityRole { Id = "2", Name = "Ventas",       NormalizedName = "VENTAS" },
             new IdentityRole { Id = "3", Name = "Produccion",   NormalizedName = "PRODUCCION" },
             new IdentityRole { Id = "4", Name = "Contabilidad", NormalizedName = "CONTABILIDAD" },
+            new IdentityRole { Id = "5", Name = "Tablet",       NormalizedName = "TABLET" },
         };
 
         builder.Entity<IdentityRole>().HasData(roles);
