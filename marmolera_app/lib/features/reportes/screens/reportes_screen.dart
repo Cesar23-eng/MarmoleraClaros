@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:marmolera_app/core/theme/app_theme.dart';
 import 'package:marmolera_app/features/auth/services/auth_service.dart';
-import 'package:marmolera_app/core/constants/api_constants.dart';
+import 'package:marmolera_app/core/constants/app_constants.dart';
 
 // ─── Modelos ──────────────────────────────────────────────────────────────────
 class DashboardData {
@@ -118,9 +118,9 @@ class _ReportesScreenState extends State<ReportesScreen>
     try {
       final h = await _headers();
       final results = await Future.wait([
-        http.get(Uri.parse('${ApiConstants.baseUrl}/reportes/dashboard'), headers: h),
-        http.get(Uri.parse('${ApiConstants.baseUrl}/reportes/mejores-clientes'), headers: h),
-        http.get(Uri.parse('${ApiConstants.baseUrl}/reportes/rendimiento-vendedores'), headers: h),
+        http.get(Uri.parse('${AppConstants.baseUrl}/reportes/dashboard'), headers: h),
+        http.get(Uri.parse('${AppConstants.baseUrl}/reportes/mejores-clientes'), headers: h),
+        http.get(Uri.parse('${AppConstants.baseUrl}/reportes/rendimiento-vendedores'), headers: h),
       ]);
       if (results.every((r) => r.statusCode == 200)) {
         setState(() {

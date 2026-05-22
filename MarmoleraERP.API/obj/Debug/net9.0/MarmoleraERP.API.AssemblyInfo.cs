@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("MarmoleraERP.API")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+9ac5d9a736a24ba5d477c4f74cedc20180b6486f")]
 [assembly: System.Reflection.AssemblyProductAttribute("MarmoleraERP.API")]
 [assembly: System.Reflection.AssemblyTitleAttribute("MarmoleraERP.API")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

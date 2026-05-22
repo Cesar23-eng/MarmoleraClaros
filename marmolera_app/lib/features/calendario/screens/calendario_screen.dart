@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:marmolera_app/core/theme/app_theme.dart';
 import 'package:marmolera_app/features/auth/services/auth_service.dart';
-import 'package:marmolera_app/core/constants/api_constants.dart';
+import 'package:marmolera_app/core/constants/app_constants.dart';
 
 // ─── Modelo ───────────────────────────────────────────────────────────────────
 class EventoCalendario {
@@ -91,7 +91,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
       final desde = DateTime(_mesActual.year, _mesActual.month, 1);
       final hasta = DateTime(_mesActual.year, _mesActual.month + 1, 0);
       final url = Uri.parse(
-          '${ApiConstants.baseUrl}/calendario?desde=${desde.toIso8601String()}&hasta=${hasta.toIso8601String()}');
+          '${AppConstants.baseUrl}/calendario?desde=${desde.toIso8601String()}&hasta=${hasta.toIso8601String()}');
       final res = await http.get(url, headers: await _headers());
       if (res.statusCode == 200) {
         final list = jsonDecode(res.body) as List;
@@ -119,7 +119,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
   }) async {
     try {
       final res = await http.post(
-        Uri.parse('${ApiConstants.baseUrl}/calendario'),
+        Uri.parse('${AppConstants.baseUrl}/calendario'),
         headers: await _headers(),
         body: jsonEncode({
           'tipo': tipo,
@@ -156,7 +156,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
           e.fecha.day == dia.day)
       .toList();
 
-  List<DateTime> _diasDelMes() {
+  List<DateTime?> _diasDelMes() {
     final primero = DateTime(_mesActual.year, _mesActual.month, 1);
     final ultimo = DateTime(_mesActual.year, _mesActual.month + 1, 0);
     final offsetInicio = (primero.weekday % 7); // Domingo=0
@@ -165,7 +165,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
       dias.add(DateTime(_mesActual.year, _mesActual.month, d));
     }
     while (dias.length % 7 != 0) dias.add(null);
-    return dias.cast<DateTime?>();
+    return dias;
   }
 
   void _mostrarDialogoNuevoEvento(DateTime dia) {

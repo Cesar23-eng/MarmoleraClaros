@@ -5,7 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:marmolera_app/core/theme/app_theme.dart';
 import 'package:marmolera_app/features/auth/services/auth_service.dart';
-import 'package:marmolera_app/core/constants/api_constants.dart';
+import 'package:marmolera_app/core/constants/app_constants.dart';
 
 // ─── Modelo liviano para tablets ─────────────────────────────────────────────
 class PedidoSinOrden {
@@ -61,7 +61,7 @@ class _TabletOrdenesScreenState extends State<TabletOrdenesScreen> {
     setState(() { _cargando = true; _error = null; });
     try {
       final res = await http.get(
-        Uri.parse('${ApiConstants.baseUrl}/ordenes/pedidos-sin-orden'),
+        Uri.parse('${AppConstants.baseUrl}/ordenes/pedidos-sin-orden'),
         headers: await _headers(),
       );
       if (res.statusCode == 200) {
@@ -94,7 +94,7 @@ class _TabletOrdenesScreenState extends State<TabletOrdenesScreen> {
       final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
 
       final res = await http.post(
-        Uri.parse('${ApiConstants.baseUrl}/ordenes'),
+        Uri.parse('${AppConstants.baseUrl}/ordenes'),
         headers: await _headers(),
         body: jsonEncode({
           'pedidoId': pedido.id,

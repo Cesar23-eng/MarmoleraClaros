@@ -143,3 +143,4 @@ C:\Users\hp\Documents\Marmolera Claros\MarmoleraERP.API\obj\Debug\net9.0\Marmole
 C:\Users\hp\Documents\Marmolera Claros\MarmoleraERP.API\obj\Debug\net9.0\ref\MarmoleraERP.API.dll
 C:\Users\hp\Documents\Marmolera Claros\MarmoleraERP.API\bin\Debug\net9.0\MySqlConnector.dll
 C:\Users\hp\Documents\Marmolera Claros\MarmoleraERP.API\bin\Debug\net9.0\Pomelo.EntityFrameworkCore.MySql.dll
+C:\Users\hp\Documents\Marmolera Claros\MarmoleraERP.API\obj\Debug\net9.0\MarmoleraERP.API.sourcelink.json

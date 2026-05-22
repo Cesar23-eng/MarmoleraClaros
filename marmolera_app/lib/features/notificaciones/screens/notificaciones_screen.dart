@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:marmolera_app/core/theme/app_theme.dart';
 import 'package:marmolera_app/features/auth/services/auth_service.dart';
-import 'package:marmolera_app/core/constants/api_constants.dart';
+import 'package:marmolera_app/core/constants/app_constants.dart';
 
 // ─── Modelo ───────────────────────────────────────────────────────────────────
 class Notificacion {
@@ -88,7 +88,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
     setState(() { _cargando = true; _error = null; });
     try {
       final res = await http.get(
-        Uri.parse('${ApiConstants.baseUrl}/notificaciones'),
+        Uri.parse('${AppConstants.baseUrl}/notificaciones'),
         headers: await _headers(),
       );
       if (res.statusCode == 200) {
@@ -111,7 +111,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
   Future<void> _marcarLeida(int id) async {
     try {
       await http.put(
-        Uri.parse('${ApiConstants.baseUrl}/notificaciones/$id/leer'),
+        Uri.parse('${AppConstants.baseUrl}/notificaciones/$id/leer'),
         headers: await _headers(),
       );
       setState(() {
@@ -132,7 +132,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
   Future<void> _marcarTodasLeidas() async {
     try {
       await http.put(
-        Uri.parse('${ApiConstants.baseUrl}/notificaciones/leer-todas'),
+        Uri.parse('${AppConstants.baseUrl}/notificaciones/leer-todas'),
         headers: await _headers(),
       );
       await _cargar();
