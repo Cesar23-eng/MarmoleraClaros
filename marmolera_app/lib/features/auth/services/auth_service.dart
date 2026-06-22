@@ -9,15 +9,38 @@ import 'package:marmolera_app/core/exceptions/auth_exception.dart';
 class AuthService {
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
-  /// Realiza login contra la API .NET y devuelve el rol del usuario.
-  /// Lanza [AuthException] si las credenciales son inválidas o hay error de red.
-  Future<String> login(String email, String password) async {
+  // ══════════════════════════════════════════════════════════════════════════
+  //  Login simplificado: solo nombre de usuario (la app móvil/desktop usa este)
+  //  El API agrega @marmolera.com automáticamente.
+  // ══════════════════════════════════════════════════════════════════════════
+  Future<String> login(String usuario, String password) async {
+    return _loginRequest(
+      endpoint: '${AppConstants.baseUrl}/api/auth/login-usuario',
+      body: {'usuario': usuario.trim().toLowerCase(), 'password': password},
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  Login clásico con email completo (para Swagger / uso Admin)
+  // ══════════════════════════════════════════════════════════════════════════
+  Future<String> loginConEmail(String email, String password) async {
+    return _loginRequest(
+      endpoint: AppConstants.loginEndpoint,
+      body: {'email': email.trim(), 'password': password},
+    );
+  }
+
+  // ── Helper interno compartido ──────────────────────────────────────────────
+  Future<String> _loginRequest({
+    required String endpoint,
+    required Map<String, String> body,
+  }) async {
     try {
       final response = await http
           .post(
-            Uri.parse(AppConstants.loginEndpoint),
+            Uri.parse(endpoint),
             headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'email': email, 'password': password}),
+            body: jsonEncode(body),
           )
           .timeout(
             const Duration(seconds: 15),
@@ -27,21 +50,23 @@ class AuthService {
           );
 
       if (response.statusCode == 200) {
-        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
 
-        // La API debe devolver { "token": "eyJ..." }
-        final token = body['token'] as String?;
+        // Guardar accessToken
+        final token = (data['accessToken'] ?? data['token']) as String?;
         if (token == null || token.isEmpty) {
           throw AuthException('El servidor no devolvió un token válido.');
         }
-
-        // Guardar token de forma segura en el dispositivo
         await _storage.write(key: AppConstants.tokenKey, value: token);
 
-        // Decodificar claims del JWT
-        final Map<String, dynamic> claims = JwtDecoder.decode(token);
+        // Guardar refreshToken si viene
+        final refresh = data['refreshToken'] as String?;
+        if (refresh != null && refresh.isNotEmpty) {
+          await _storage.write(key: 'refreshToken', value: refresh);
+        }
 
-        // Extraer el rol — ajusta el claim key según tu API
+        // Extraer rol del JWT
+        final claims = JwtDecoder.decode(token);
         final role = claims['role'] ??
             claims['Role'] ??
             claims[
@@ -49,16 +74,19 @@ class AuthService {
             '';
 
         if (role.toString().isEmpty) {
-          throw AuthException(
-            'No se encontró el rol del usuario en el token.',
-          );
+          throw AuthException('No se encontró el rol del usuario en el token.');
         }
 
         return role.toString();
       } else if (response.statusCode == 401) {
-        throw AuthException('Correo o contraseña incorrectos.');
-      } else if (response.statusCode == 403) {
-        throw AuthException('No tienes permisos para acceder al sistema.');
+        // Leer mensaje de la API si viene
+        try {
+          final err = jsonDecode(response.body) as Map<String, dynamic>;
+          throw AuthException(err['mensaje']?.toString() ?? 'Credenciales incorrectas.');
+        } catch (e) {
+          if (e is AuthException) rethrow;
+          throw AuthException('Usuario o contraseña incorrectos.');
+        }
       } else {
         throw AuthException(
           'Error del servidor (${response.statusCode}). Intenta de nuevo.',
@@ -67,18 +95,20 @@ class AuthService {
     } on AuthException {
       rethrow;
     } catch (e) {
+      if (e is AuthException) rethrow;
       throw AuthException(
         'Error de conexión. Verifica que el servidor esté activo.',
       );
     }
   }
 
-  /// Cierra sesión: elimina el token del storage seguro.
+  /// Cierra sesión: elimina tokens del storage seguro.
   Future<void> logout() async {
     await _storage.delete(key: AppConstants.tokenKey);
+    await _storage.delete(key: 'refreshToken');
   }
 
-  /// Recupera el token guardado, o null si no hay sesión activa.
+  /// Recupera el accessToken guardado.
   Future<String?> getToken() async {
     return await _storage.read(key: AppConstants.tokenKey);
   }
