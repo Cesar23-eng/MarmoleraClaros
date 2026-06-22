@@ -1,18 +1,12 @@
 namespace MarmoleraERP.API.Modules.Identity.DTOs;
 
-// ── Auth ─────────────────────────────────────────────────────────────────────
+// ── Auth ─────────────────────────────────────────────────────────────────────────────
 public record LoginDto(
     string Email,
     string Password
 );
 
-public record LoginResponseDto(
-    string Token,
-    string UserId,
-    string Email,
-    string Nombre,
-    List<string> Roles
-);
+// LoginResponseDto → definida en LoginResponseDto.cs (AccessToken + RefreshToken)
 
 public record RegisterDto(
     string Nombre,
@@ -21,13 +15,13 @@ public record RegisterDto(
     string Rol
 );
 
-// ── Gestión de usuarios (Admin) ─────────────────────────────────────────────────
+// ── Gestión de usuarios (Admin) ──────────────────────────────────────────────────
 public record UsuarioDto(
-    string   Id,
-    string   Nombre,
-    string   Email,
-    bool     Activo,
-    DateTime FechaCreacion,
+    string       Id,
+    string       Nombre,
+    string       Email,
+    bool         Activo,
+    DateTime     FechaCreacion,
     List<string> Roles
 );
 
@@ -39,10 +33,10 @@ public record CrearUsuarioDto(
 );
 
 public record EditarUsuarioDto(
-    string  Nombre,
-    string  Email,
-    string  Rol,
-    bool    Activo
+    string Nombre,
+    string Email,
+    string Rol,
+    bool   Activo
 );
 
 public record CambiarPasswordDto(
