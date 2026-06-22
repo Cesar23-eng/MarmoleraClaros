@@ -191,8 +191,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         {
             e.HasKey(n => n.Id);
             e.Property(n => n.Tipo).HasConversion<string>().HasMaxLength(40);
+            e.Property(n => n.Titulo).IsRequired().HasMaxLength(150);
             e.Property(n => n.Mensaje).IsRequired().HasMaxLength(500);
-            e.Property(n => n.DestinoRol).IsRequired().HasMaxLength(50);
+            e.Property(n => n.RolDestino).IsRequired().HasMaxLength(50);  // ← corregido
         });
 
         // ─── OrdenFabrica ──────────────────────────────────────────────────────────────
