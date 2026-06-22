@@ -1,4 +1,5 @@
 using MarmoleraERP.API.Modules.Fabrica.Enums;
+using MarmoleraERP.API.Modules.Ventas.Entities;
 
 namespace MarmoleraERP.API.Modules.Fabrica.Entities;
 
@@ -10,8 +11,10 @@ public class OrdenFabrica
 {
     public int    Id              { get; set; }
 
-    // Referencia a la cotizacion (no FK directa para evitar ciclo, usamos el ID)
     public int    CotizacionId    { get; set; }
+
+    /// <summary>Navegación hacia la cotización origen (cargada con Include/ThenInclude).</summary>
+    public Cotizacion? Cotizacion { get; set; }
 
     public EstadoOrden Estado     { get; set; } = EstadoOrden.PorIniciar;
 
@@ -21,7 +24,7 @@ public class OrdenFabrica
 
     public string? Notas          { get; set; }
 
-    public DateTime FechaCreacion  { get; set; } = DateTime.UtcNow;
+    public DateTime  FechaCreacion { get; set; } = DateTime.UtcNow;
     public DateTime? FechaInicio   { get; set; }
     public DateTime? FechaFin      { get; set; }
 }
