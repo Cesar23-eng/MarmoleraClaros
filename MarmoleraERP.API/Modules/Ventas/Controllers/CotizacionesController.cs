@@ -9,17 +9,21 @@ using MarmoleraERP.API.Modules.Ventas.Entities;
 using MarmoleraERP.API.Modules.Ventas.Enums;
 using MarmoleraERP.API.Modules.Fabrica.Entities;
 using MarmoleraERP.API.Modules.Fabrica.Enums;
+using MarmoleraERP.API.Modules.Notificaciones;
+using MarmoleraERP.API.Modules.Notificaciones.Services;
 
 namespace MarmoleraERP.API.Modules.Ventas.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class CotizacionesController(AppDbContext db) : ControllerBase
+public class CotizacionesController(
+    AppDbContext db,
+    INotificacionService notifSvc) : ControllerBase
 {
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     //  POST /api/cotizaciones
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     [HttpPost]
     [ProducesResponseType(typeof(CotizacionResponseDto), StatusCodes.Status201Created)]
     public async Task<IActionResult> CrearCotizacion([FromBody] CotizacionCreateDto dto)
@@ -44,8 +48,8 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
             Estado        = "Cotizado"
         };
 
-        var errores   = new List<string>();
-        var detalles  = new List<DetalleCotizacion>();
+        var errores  = new List<string>();
+        var detalles = new List<DetalleCotizacion>();
 
         for (int i = 0; i < dto.Detalles.Count; i++)
         {
@@ -76,14 +80,17 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
         db.Cotizaciones.Add(cotizacion);
         await db.SaveChangesAsync();
 
+        // ★ DISPARADOR: notificar al Admin que hay una nueva cotización pendiente
+        await notifSvc.CotizacionCreadaAsync(cotizacion.Id, cliente.NombreCompleto);
+
         return CreatedAtAction(nameof(ObtenerCotizacion),
             new { id = cotizacion.Id },
             ToDto(cotizacion, cliente));
     }
 
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     //  PUT /api/cotizaciones/{id}
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     [HttpPut("{id:int}")]
     [ProducesResponseType(typeof(CotizacionResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> EditarCotizacion(int id, [FromBody] CotizacionCreateDto dto)
@@ -106,7 +113,7 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
         if (dto.Detalles is null || dto.Detalles.Count == 0)
             return BadRequest(new { mensaje = "La cotización debe incluir al menos un mesón." });
 
-        var errores       = new List<string>();
+        var errores        = new List<string>();
         var nuevosDetalles = new List<DetalleCotizacion>();
 
         for (int i = 0; i < dto.Detalles.Count; i++)
@@ -142,9 +149,9 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
         return Ok(ToDto(cotizacion, cliente));
     }
 
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     //  GET /api/cotizaciones
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     [HttpGet]
     public async Task<IActionResult> ObtenerMisCotizaciones()
     {
@@ -161,9 +168,9 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
         return Ok(lista.Select(c => ToDto(c, c.Cliente)));
     }
 
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     //  GET /api/cotizaciones/{id}
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     [HttpGet("{id:int}")]
     public async Task<IActionResult> ObtenerCotizacion(int id)
     {
@@ -178,9 +185,9 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
         return Ok(ToDto(cotizacion, cotizacion.Cliente));
     }
 
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     //  GET /api/cotizaciones/todas
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     [HttpGet("todas")]
     public async Task<IActionResult> ObtenerTodasLasCotizaciones()
     {
@@ -193,29 +200,28 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
         return Ok(lista.Select(c => ToDto(c, c.Cliente)));
     }
 
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     //  PUT /api/cotizaciones/{id}/aprobar
-    //  ★ CREA OrdenFabrica automáticamente (si no existe ya)
-    // ════════════════════════════════════════════════════════════════════════
+    //  ★ Crea OrdenFabrica + notifica a Produccion y Tablet
+    // ══════════════════════════════════════════════════════════════════════
     [HttpPut("{id:int}/aprobar")]
     [Authorize(Roles = "Ventas,Admin")]
     public async Task<IActionResult> AprobarCotizacion(int id)
     {
-        var cotizacion = await db.Cotizaciones.FindAsync(id);
+        var cotizacion = await db.Cotizaciones
+            .Include(c => c.Cliente)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
         if (cotizacion is null)
             return NotFound(new { mensaje = $"Cotización con ID {id} no encontrada." });
 
         if (cotizacion.Estado != "Cotizado")
             return BadRequest(new { mensaje = $"Solo se pueden aprobar cotizaciones en estado 'Cotizado'. Estado actual: '{cotizacion.Estado}'." });
 
-        // 1. Cambiar estado de la cotización
         cotizacion.Estado          = "Aprobado";
         cotizacion.FechaAprobacion = DateTime.UtcNow;
 
-        // 2. Crear OrdenFabrica si no existe ya (idempotente)
-        var yaExiste = await db.OrdenesFabrica
-            .AnyAsync(o => o.CotizacionId == id);
-
+        var yaExiste = await db.OrdenesFabrica.AnyAsync(o => o.CotizacionId == id);
         if (!yaExiste)
         {
             db.OrdenesFabrica.Add(new OrdenFabrica
@@ -228,12 +234,15 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
 
         await db.SaveChangesAsync();
 
+        // ★ DISPARADOR: notificar a Fábrica que hay una orden nueva lista
+        await notifSvc.CotizacionAprobadaAsync(id, cotizacion.Cliente!.NombreCompleto);
+
         return Ok(new { mensaje = $"Cotización {id} aprobada. Orden de fábrica creada y visible en el tablero de producción." });
     }
 
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     //  GET /api/cotizaciones/pendientes-produccion
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     [HttpGet("pendientes-produccion")]
     [Authorize(Roles = "Produccion,Admin")]
     public async Task<IActionResult> ObtenerPendientesProduccion()
@@ -248,15 +257,18 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
         return Ok(lista.Select(c => ToDto(c, c.Cliente)));
     }
 
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     //  PUT /api/cotizaciones/{id}/iniciar-produccion
-    //  ★ Sincroniza OrdenFabrica a EnProduccion
-    // ════════════════════════════════════════════════════════════════════════
+    //  ★ Sincroniza OrdenFabrica + notifica a Admin y Ventas
+    // ══════════════════════════════════════════════════════════════════════
     [HttpPut("{id:int}/iniciar-produccion")]
     [Authorize(Roles = "Produccion,Admin")]
     public async Task<IActionResult> IniciarProduccion(int id)
     {
-        var cotizacion = await db.Cotizaciones.FindAsync(id);
+        var cotizacion = await db.Cotizaciones
+            .Include(c => c.Cliente)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
         if (cotizacion is null)
             return NotFound(new { mensaje = $"Cotización con ID {id} no encontrada." });
 
@@ -265,9 +277,7 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
 
         cotizacion.Estado = "EnProduccion";
 
-        // Sincronizar OrdenFabrica
-        var orden = await db.OrdenesFabrica
-            .FirstOrDefaultAsync(o => o.CotizacionId == id);
+        var orden = await db.OrdenesFabrica.FirstOrDefaultAsync(o => o.CotizacionId == id);
         if (orden is not null)
         {
             orden.Estado      = EstadoOrden.EnProduccion;
@@ -275,12 +285,16 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
         }
 
         await db.SaveChangesAsync();
+
+        // ★ DISPARADOR: notificar a Admin y Ventas que orden entró en producción
+        await notifSvc.OrdenIniciadaAsync(orden?.Id ?? id, cotizacion.Cliente!.NombreCompleto);
+
         return Ok(new { mensaje = $"Cotización {id} pasó a 'En Producción'." });
     }
 
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     //  GET /api/cotizaciones/en-produccion
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     [HttpGet("en-produccion")]
     [Authorize(Roles = "Produccion,Admin")]
     public async Task<IActionResult> ObtenerEnProduccion()
@@ -295,9 +309,9 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
         return Ok(lista.Select(c => ToDto(c, c.Cliente)));
     }
 
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     //  GET /api/cotizaciones/terminados
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     [HttpGet("terminados")]
     [Authorize(Roles = "Produccion,Admin")]
     public async Task<IActionResult> ObtenerTerminados()
@@ -312,15 +326,18 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
         return Ok(lista.Select(c => ToDto(c, c.Cliente)));
     }
 
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
     //  PUT /api/cotizaciones/{id}/finalizar-produccion
-    //  ★ Sincroniza OrdenFabrica a Finalizado
-    // ════════════════════════════════════════════════════════════════════════
+    //  ★ Sincroniza OrdenFabrica + notifica a Admin, Ventas y Contabilidad
+    // ══════════════════════════════════════════════════════════════════════
     [HttpPut("{id:int}/finalizar-produccion")]
     [Authorize(Roles = "Produccion,Admin")]
     public async Task<IActionResult> FinalizarProduccion(int id)
     {
-        var cotizacion = await db.Cotizaciones.FindAsync(id);
+        var cotizacion = await db.Cotizaciones
+            .Include(c => c.Cliente)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
         if (cotizacion is null)
             return NotFound(new { mensaje = $"Cotización con ID {id} no encontrada." });
 
@@ -329,9 +346,7 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
 
         cotizacion.Estado = "Finalizado";
 
-        // Sincronizar OrdenFabrica
-        var orden = await db.OrdenesFabrica
-            .FirstOrDefaultAsync(o => o.CotizacionId == id);
+        var orden = await db.OrdenesFabrica.FirstOrDefaultAsync(o => o.CotizacionId == id);
         if (orden is not null)
         {
             orden.Estado   = EstadoOrden.Finalizado;
@@ -339,10 +354,14 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
         }
 
         await db.SaveChangesAsync();
+
+        // ★ DISPARADOR: notificar a Admin, Ventas y Contabilidad que orden finalizó
+        await notifSvc.OrdenFinalizadaAsync(orden?.Id ?? id, cotizacion.Cliente!.NombreCompleto);
+
         return Ok(new { mensaje = $"Cotización {id} pasó a 'Finalizado'." });
     }
 
-    // ─── HELPERS ──────────────────────────────────────────────────────────────────────
+    // ─── HELPERS ─────────────────────────────────────────────────────────────────
     private static decimal CalcularArea(DetalleCotizacionCreateDto d) =>
         d.Geometria switch
         {

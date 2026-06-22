@@ -5,13 +5,17 @@ using MarmoleraERP.API.Data;
 using MarmoleraERP.API.Modules.Fabrica.DTOs;
 using MarmoleraERP.API.Modules.Fabrica.Entities;
 using MarmoleraERP.API.Modules.Fabrica.Enums;
+using MarmoleraERP.API.Modules.Notificaciones;
+using MarmoleraERP.API.Modules.Notificaciones.Services;
 
 namespace MarmoleraERP.API.Modules.Fabrica.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = "Admin,Produccion,Tablet")]
-public class FabricaController(AppDbContext db) : ControllerBase
+public class FabricaController(
+    AppDbContext db,
+    INotificacionService notifSvc) : ControllerBase
 {
     private async Task<List<CotizacionKanbanDto>> GetKanbanByEstado(EstadoOrden estado)
     {
@@ -60,31 +64,67 @@ public class FabricaController(AppDbContext db) : ControllerBase
     public async Task<IActionResult> GetFinalizados() =>
         Ok(await GetKanbanByEstado(EstadoOrden.Finalizado));
 
+    // ════════════════════════════════════════════════════════════════════
+    //  POST /api/fabrica/{id}/iniciar
+    //  ★ Notifica a Admin y Ventas que la orden inició en fábrica
+    // ════════════════════════════════════════════════════════════════════
     [HttpPost("{id:int}/iniciar")]
     public async Task<IActionResult> IniciarOrden(int id)
     {
-        var orden = await db.OrdenesFabrica.FindAsync(id);
+        var orden = await db.OrdenesFabrica
+            .Include(o => o.Cotizacion)
+                .ThenInclude(c => c!.Cliente)
+            .FirstOrDefaultAsync(o => o.Id == id);
+
         if (orden is null) return NotFound();
         if (orden.Estado != EstadoOrden.PorIniciar)
             return BadRequest("La orden no está en estado PorIniciar.");
 
         orden.Estado      = EstadoOrden.EnProduccion;
         orden.FechaInicio = DateTime.UtcNow;
+
+        // Sincronizar estado en Cotizacion
+        if (orden.Cotizacion is not null)
+            orden.Cotizacion.Estado = "EnProduccion";
+
         await db.SaveChangesAsync();
+
+        // ★ DISPARADOR: notificar a Admin y Ventas
+        var clienteNombre = orden.Cotizacion?.Cliente?.NombreCompleto ?? $"Orden #{id}";
+        await notifSvc.OrdenIniciadaAsync(id, clienteNombre);
+
         return NoContent();
     }
 
+    // ════════════════════════════════════════════════════════════════════
+    //  POST /api/fabrica/{id}/finalizar
+    //  ★ Notifica a Admin, Ventas y Contabilidad que la orden finalizó
+    // ════════════════════════════════════════════════════════════════════
     [HttpPost("{id:int}/finalizar")]
     public async Task<IActionResult> FinalizarOrden(int id)
     {
-        var orden = await db.OrdenesFabrica.FindAsync(id);
+        var orden = await db.OrdenesFabrica
+            .Include(o => o.Cotizacion)
+                .ThenInclude(c => c!.Cliente)
+            .FirstOrDefaultAsync(o => o.Id == id);
+
         if (orden is null) return NotFound();
         if (orden.Estado != EstadoOrden.EnProduccion)
             return BadRequest("La orden no está en producción.");
 
         orden.Estado   = EstadoOrden.Finalizado;
         orden.FechaFin = DateTime.UtcNow;
+
+        // Sincronizar estado en Cotizacion
+        if (orden.Cotizacion is not null)
+            orden.Cotizacion.Estado = "Finalizado";
+
         await db.SaveChangesAsync();
+
+        // ★ DISPARADOR: notificar a Admin, Ventas y Contabilidad
+        var clienteNombre = orden.Cotizacion?.Cliente?.NombreCompleto ?? $"Orden #{id}";
+        await notifSvc.OrdenFinalizadaAsync(id, clienteNombre);
+
         return NoContent();
     }
 
