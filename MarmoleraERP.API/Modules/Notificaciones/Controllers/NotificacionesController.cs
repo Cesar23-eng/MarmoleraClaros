@@ -1,134 +1,140 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MarmoleraERP.API.Data;
 using MarmoleraERP.API.Modules.Notificaciones.DTOs;
 using MarmoleraERP.API.Modules.Notificaciones.Entities;
-using MarmoleraERP.API.Modules.Notificaciones.Enums;
 
 namespace MarmoleraERP.API.Modules.Notificaciones.Controllers;
 
 /// <summary>
-/// Gestión de notificaciones internas automáticas.
-/// Cada rol solo ve sus propias notificaciones.
+/// Gestiona las notificaciones dirigidas a roles del sistema.
+/// Cada usuario ve solo las notificaciones de su propio rol.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class NotificacionesController : ControllerBase
+public class NotificacionesController(AppDbContext db) : ControllerBase
 {
-    private readonly AppDbContext _db;
-
-    public NotificacionesController(AppDbContext db) => _db = db;
-
-    // ──────────────────────────────────────────────────────────────────────────
-    // CONSULTAR NOTIFICACIONES DEL ROL ACTIVO
-    // ──────────────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Devuelve las notificaciones pendientes para el rol del usuario autenticado.
-    /// </summary>
+    // ════════════════════════════════════════════════════════════════════════
+    //  GET /api/notificaciones  — todas las del rol del usuario
+    // ════════════════════════════════════════════════════════════════════════
     [HttpGet]
     [ProducesResponseType(typeof(List<NotificacionDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetMisNotificaciones([FromQuery] bool soloNoLeidas = true)
+    public async Task<IActionResult> GetMias()
     {
-        var roles = User.Claims
-            .Where(c => c.Type == System.Security.Claims.ClaimTypes.Role)
-            .Select(c => c.Value)
-            .ToList();
+        var rol = ObtenerRol();
+        if (rol is null) return Unauthorized();
 
-        var query = _db.Notificaciones
-            .Where(n => roles.Contains(n.DestinoRol));
-
-        if (soloNoLeidas)
-            query = query.Where(n => !n.Leida);
-
-        var result = await query
+        var lista = await db.Notificaciones
+            .Where(n => n.DestinoRol == rol || n.DestinoRol == "Admin")
             .OrderByDescending(n => n.FechaCreacion)
-            .Select(n => new NotificacionDto(
-                n.Id,
-                n.Tipo.ToString(),
-                n.PedidoId,
-                n.PedidoId.HasValue ? $"PED-{n.PedidoId:D5}" : "",
-                n.Mensaje,
-                n.DestinoRol,
-                n.Leida,
-                n.FechaCreacion,
-                n.FechaLectura
-            ))
+            .Take(100)
             .ToListAsync();
 
-        return Ok(result);
+        return Ok(lista.Select(ToDto));
     }
 
-    /// <summary>
-    /// Devuelve el conteo de notificaciones no leídas (para el badge en la UI).
-    /// </summary>
-    [HttpGet("count")]
+    // ════════════════════════════════════════════════════════════════════════
+    //  GET /api/notificaciones/no-leidas/count  — badge contador
+    // ════════════════════════════════════════════════════════════════════════
+    [HttpGet("no-leidas/count")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetCount()
+    public async Task<IActionResult> CountNoLeidas()
     {
-        var roles = User.Claims
-            .Where(c => c.Type == System.Security.Claims.ClaimTypes.Role)
-            .Select(c => c.Value)
-            .ToList();
+        var rol = ObtenerRol();
+        if (rol is null) return Unauthorized();
 
-        var count = await _db.Notificaciones
-            .CountAsync(n => roles.Contains(n.DestinoRol) && !n.Leida);
+        var count = await db.Notificaciones
+            .CountAsync(n => (n.DestinoRol == rol || n.DestinoRol == "Admin") && !n.Leida);
 
-        return Ok(new { noLeidas = count });
+        return Ok(new { count });
     }
 
-    // ──────────────────────────────────────────────────────────────────────────
-    // MARCAR COMO LEÍDAS
-    // ──────────────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Marca una o varias notificaciones como leídas.
-    /// </summary>
-    [HttpPut("marcar-leidas")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> MarcarLeidas([FromBody] MarcarLeidaDto dto)
-    {
-        var notifs = await _db.Notificaciones
-            .Where(n => dto.Ids.Contains(n.Id))
-            .ToListAsync();
-
-        foreach (var n in notifs)
-        {
-            n.Leida        = true;
-            n.FechaLectura = DateTime.UtcNow;
-        }
-
-        await _db.SaveChangesAsync();
-        return NoContent();
-    }
-
-    // ──────────────────────────────────────────────────────────────────────────
-    // CREAR NOTIFICACIÓN MANUAL (solo Admin)
-    // ──────────────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// [Admin] Crea una notificación manual para un rol específico.
-    /// </summary>
+    // ════════════════════════════════════════════════════════════════════════
+    //  POST /api/notificaciones  — crear (solo Admin)
+    // ════════════════════════════════════════════════════════════════════════
     [HttpPost]
     [Authorize(Roles = "Admin")]
-    [ProducesResponseType(StatusCodes.Status201Created)]
-    public async Task<IActionResult> CrearManual(
-        [FromBody] (string Mensaje, string DestinoRol, int? PedidoId) body)
+    [ProducesResponseType(typeof(NotificacionDto), StatusCodes.Status201Created)]
+    public async Task<IActionResult> Crear([FromBody] CrearNotificacionDto dto)
     {
         var notif = new Notificacion
         {
-            Tipo          = TipoNotificacion.PedidoPendientePago,
-            PedidoId      = body.PedidoId,
-            Mensaje       = body.Mensaje,
-            DestinoRol    = body.DestinoRol,
-            FechaCreacion = DateTime.UtcNow
+            Tipo          = dto.Tipo,
+            Mensaje       = dto.Mensaje,
+            DestinoRol    = dto.DestinoRol,
+            ReferenciaId  = dto.ReferenciaId,
+            FechaCreacion = DateTime.UtcNow,
         };
 
-        _db.Notificaciones.Add(notif);
-        await _db.SaveChangesAsync();
+        db.Notificaciones.Add(notif);
+        await db.SaveChangesAsync();
 
-        return Created();
+        return CreatedAtAction(nameof(GetMias), ToDto(notif));
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  PUT /api/notificaciones/{id}/leer
+    // ════════════════════════════════════════════════════════════════════════
+    [HttpPut("{id:int}/leer")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> MarcarLeida(int id)
+    {
+        var notif = await db.Notificaciones.FindAsync(id);
+        if (notif is null) return NotFound();
+
+        notif.Leida = true;
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  PUT /api/notificaciones/leer-todas
+    // ════════════════════════════════════════════════════════════════════════
+    [HttpPut("leer-todas")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> MarcarTodasLeidas()
+    {
+        var rol = ObtenerRol();
+        if (rol is null) return Unauthorized();
+
+        var pendientes = await db.Notificaciones
+            .Where(n => (n.DestinoRol == rol || n.DestinoRol == "Admin") && !n.Leida)
+            .ToListAsync();
+
+        pendientes.ForEach(n => n.Leida = true);
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  DELETE /api/notificaciones/{id}  (solo Admin)
+    // ════════════════════════════════════════════════════════════════════════
+    [HttpDelete("{id:int}")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Eliminar(int id)
+    {
+        var notif = await db.Notificaciones.FindAsync(id);
+        if (notif is null) return NotFound();
+
+        db.Notificaciones.Remove(notif);
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  HELPERS
+    // ════════════════════════════════════════════════════════════════════════
+    private string? ObtenerRol() =>
+        User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value;
+
+    private static NotificacionDto ToDto(Notificacion n) => new(
+        n.Id, n.Tipo.ToString(), n.Mensaje,
+        n.DestinoRol, n.Leida, n.FechaCreacion, n.ReferenciaId
+    );
 }
