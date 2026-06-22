@@ -1,6 +1,8 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
@@ -12,12 +14,13 @@ namespace MarmoleraERP.API.Modules.Identity.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 public class AuthController(
-    UserManager<ApplicationUser>  userManager,
+    UserManager<ApplicationUser>   userManager,
     SignInManager<ApplicationUser> signInManager,
     IConfiguration config) : ControllerBase
 {
     // ════════════════════════════════════════════════════════════════════════
     //  POST /api/auth/login
+    //  Devuelve accessToken (JWT, corta vida) + refreshToken (opaco, larga vida)
     // ════════════════════════════════════════════════════════════════════════
     [HttpPost("login")]
     [ProducesResponseType(typeof(LoginResponseDto), StatusCodes.Status200OK)]
@@ -32,10 +35,59 @@ public class AuthController(
         if (!result.Succeeded)
             return Unauthorized(new { mensaje = "Credenciales inválidas." });
 
-        var roles = await userManager.GetRolesAsync(user);
-        var token = GenerarToken(user, roles);
+        var roles        = await userManager.GetRolesAsync(user);
+        var accessToken  = GenerarAccessToken(user, roles);
+        var refreshToken = await GuardarRefreshTokenAsync(user);
 
-        return Ok(new LoginResponseDto(token, user.Id, user.Email!, user.Nombre, roles.ToList()));
+        return Ok(new LoginResponseDto(accessToken, refreshToken, user.Id, user.Email!, user.Nombre, roles.ToList()));
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  POST /api/auth/refresh
+    //  Valida el refresh token y devuelve un nuevo par de tokens (rotación)
+    // ════════════════════════════════════════════════════════════════════════
+    [HttpPost("refresh")]
+    [ProducesResponseType(typeof(LoginResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Refresh([FromBody] RefreshRequestDto dto)
+    {
+        // Buscar usuario por el refresh token recibido
+        var user = userManager.Users.SingleOrDefault(u => u.RefreshToken == dto.RefreshToken);
+
+        if (user is null || !user.Activo)
+            return Unauthorized(new { mensaje = "Refresh token inválido." });
+
+        if (user.RefreshTokenExpiry is null || user.RefreshTokenExpiry < DateTime.UtcNow)
+            return Unauthorized(new { mensaje = "Refresh token expirado. Vuelve a iniciar sesión." });
+
+        // Token válido → rotar: generar un par nuevo y anular el anterior
+        var roles           = await userManager.GetRolesAsync(user);
+        var nuevoAccess     = GenerarAccessToken(user, roles);
+        var nuevoRefresh    = await GuardarRefreshTokenAsync(user);
+
+        return Ok(new LoginResponseDto(nuevoAccess, nuevoRefresh, user.Id, user.Email!, user.Nombre, roles.ToList()));
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  POST /api/auth/logout
+    //  Revoca el refresh token del usuario autenticado
+    // ════════════════════════════════════════════════════════════════════════
+    [HttpPost("logout")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> Logout()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user   = await userManager.FindByIdAsync(userId!);
+
+        if (user is not null)
+        {
+            user.RefreshToken       = null;
+            user.RefreshTokenExpiry = null;
+            await userManager.UpdateAsync(user);
+        }
+
+        return NoContent();
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -68,8 +120,10 @@ public class AuthController(
         return StatusCode(201, new { mensaje = "Usuario creado correctamente.", userId = user.Id });
     }
 
-    // ─── Helper: genera JWT ─────────────────────────────────────────────────────────
-    private string GenerarToken(ApplicationUser user, IList<string> roles)
+    // ─── HELPERS ──────────────────────────────────────────────────────────────────
+
+    /// <summary>Genera un JWT de corta vida con todos los claims del usuario.</summary>
+    private string GenerarAccessToken(ApplicationUser user, IList<string> roles)
     {
         var jwtSettings = config.GetSection("JwtSettings");
         var key         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]!));
@@ -93,5 +147,26 @@ public class AuthController(
         );
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    /// <summary>
+    /// Genera un refresh token criptográficamente seguro, lo persiste en el usuario
+    /// con su fecha de expiración y devuelve el valor en texto plano.
+    /// </summary>
+    private async Task<string> GuardarRefreshTokenAsync(ApplicationUser user)
+    {
+        var jwtSettings     = config.GetSection("JwtSettings");
+        var diasExpiracion  = int.Parse(jwtSettings["RefreshTokenDays"] ?? "30");
+
+        // 32 bytes aleatorios → 43 chars Base64Url, sin padding
+        var tokenBytes   = RandomNumberGenerator.GetBytes(32);
+        var refreshToken = Convert.ToBase64String(tokenBytes)
+                              .Replace("+", "-").Replace("/", "_").Replace("=", "");
+
+        user.RefreshToken       = refreshToken;
+        user.RefreshTokenExpiry = DateTime.UtcNow.AddDays(diasExpiracion);
+        await userManager.UpdateAsync(user);
+
+        return refreshToken;
     }
 }

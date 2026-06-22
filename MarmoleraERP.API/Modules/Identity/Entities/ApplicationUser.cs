@@ -14,4 +14,11 @@ public class ApplicationUser : IdentityUser
     public bool Activo { get; set; } = true;
 
     public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
+
+    // ── Refresh Token ─────────────────────────────────────────────────────────
+    /// <summary>Token opaco de larga duración. Reemplazado en cada uso (rotación).</summary>
+    public string?   RefreshToken       { get; set; }
+
+    /// <summary>Momento de expiración del refresh token actual.</summary>
+    public DateTime? RefreshTokenExpiry { get; set; }
 }
