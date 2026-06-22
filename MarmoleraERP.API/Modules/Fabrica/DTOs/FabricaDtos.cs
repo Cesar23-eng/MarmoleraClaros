@@ -1,23 +1,26 @@
 namespace MarmoleraERP.API.Modules.Fabrica.DTOs;
 
-// DTO exclusivo para el tablero Kanban de fábrica.
-// Deliberadamente NO expone precios ni información financiera.
-
-/// <summary>Resumen de una orden visible en el tablero de fábrica.</summary>
+// ── Tarjeta Kanban (lo que ve el tablero) ─────────────────────────────────────
 public record CotizacionKanbanDto(
-    int       Id,
-    string    NombreCliente,
-    string    Telefono,
-    DateTime? FechaAprobacion,
-    string?   Comentarios,
-    int       CantidadMesones,
-    List<MesonKanbanDto> Mesones
+    int     OrdenFabricaId,
+    int     CotizacionId,
+    string  NombreCliente,
+    string  Telefono,
+    string  Estado,
+    string? OperarioNombre,
+    string? Notas,
+    decimal PrecioTotal,
+    DateTime FechaCreacion,
+    DateTime? FechaInicio,
+    DateTime? FechaFin,
+    int     TotalPiezas
 );
 
-/// <summary>Datos de un mesón visibles al operario (sin precio).</summary>
-public record MesonKanbanDto(
-    int     Id,
-    string  NombreMaterial,
-    string  Geometria,
-    decimal AreaM2
+// ── Asignar operario ─────────────────────────────────────────────────────────
+public record AsignarOperarioDto(
+    string OperarioId,
+    string OperarioNombre
 );
+
+// ── Agregar nota ─────────────────────────────────────────────────────────────
+public record AgregarNotaDto(string Nota);

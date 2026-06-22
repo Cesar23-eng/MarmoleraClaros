@@ -3,130 +3,142 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MarmoleraERP.API.Data;
 using MarmoleraERP.API.Modules.Fabrica.DTOs;
+using MarmoleraERP.API.Modules.Fabrica.Entities;
+using MarmoleraERP.API.Modules.Fabrica.Enums;
 
 namespace MarmoleraERP.API.Modules.Fabrica.Controllers;
 
 /// <summary>
-/// Tablero de fábrica: gestiona el flujo de producción de cotizaciones aprobadas.
-/// Solo expone datos operativos (sin precios) al rol Produccion.
-/// Flujo: Aprobado → EnProduccion → Finalizado
+/// Tablero de producción Kanban.
+/// Roles: Admin y Produccion ven todo; Tablet solo puede iniciar/finalizar.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Produccion,Admin")]
+[Authorize(Roles = "Admin,Produccion,Tablet")]
 public class FabricaController(AppDbContext db) : ControllerBase
 {
-    // ════════════════════════════════════════════════════════════════════════
-    //  GET /api/fabrica/por-iniciar  — Columna 1 del Kanban
-    // ════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  HELPERS
+    // ═══════════════════════════════════════════════════════════════════════════
+    private async Task<List<CotizacionKanbanDto>> GetKanbanByEstado(EstadoOrden estado)
+    {
+        var ordenes = await db.OrdenesFabrica
+            .Where(o => o.Estado == estado)
+            .OrderBy(o => o.FechaCreacion)
+            .ToListAsync();
+
+        var ids = ordenes.Select(o => o.CotizacionId).ToList();
+
+        var cotizaciones = await db.Cotizaciones
+            .Include(c => c.Cliente)
+            .Include(c => c.Detalles)
+            .Where(c => ids.Contains(c.Id))
+            .ToListAsync();
+
+        return ordenes.Select(o =>
+        {
+            var cot = cotizaciones.FirstOrDefault(c => c.Id == o.CotizacionId);
+            return new CotizacionKanbanDto(
+                OrdenFabricaId: o.Id,
+                CotizacionId:   o.CotizacionId,
+                NombreCliente:  cot?.Cliente?.Nombre ?? "Sin cliente",
+                Telefono:       cot?.Cliente?.Telefono ?? "",
+                Estado:         o.Estado.ToString(),
+                OperarioNombre: o.OperarioNombre,
+                Notas:          o.Notas,
+                PrecioTotal:    cot?.PrecioTotal ?? 0,
+                FechaCreacion:  o.FechaCreacion,
+                FechaInicio:    o.FechaInicio,
+                FechaFin:       o.FechaFin,
+                TotalPiezas:    cot?.Detalles?.Count ?? 0
+            );
+        }).ToList();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  GET  /api/fabrica/por-iniciar
+    // ═══════════════════════════════════════════════════════════════════════════
     [HttpGet("por-iniciar")]
-    [ProducesResponseType(typeof(List<CotizacionKanbanDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetPorIniciar()
-    {
-        var lista = await db.Cotizaciones
-            .Include(c => c.Cliente)
-            .Include(c => c.Detalles)
-            .Where(c => c.Estado == "Aprobado")
-            .OrderBy(c => c.FechaAprobacion)
-            .ToListAsync();
+    public async Task<IActionResult> GetPorIniciar() =>
+        Ok(await GetKanbanByEstado(EstadoOrden.PorIniciar));
 
-        return Ok(lista.Select(ToKanbanDto));
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
-    //  GET /api/fabrica/en-produccion  — Columna 2 del Kanban
-    // ════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  GET  /api/fabrica/en-produccion
+    // ═══════════════════════════════════════════════════════════════════════════
     [HttpGet("en-produccion")]
-    [ProducesResponseType(typeof(List<CotizacionKanbanDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetEnProduccion()
-    {
-        var lista = await db.Cotizaciones
-            .Include(c => c.Cliente)
-            .Include(c => c.Detalles)
-            .Where(c => c.Estado == "EnProduccion")
-            .OrderBy(c => c.FechaAprobacion)
-            .ToListAsync();
+    public async Task<IActionResult> GetEnProduccion() =>
+        Ok(await GetKanbanByEstado(EstadoOrden.EnProduccion));
 
-        return Ok(lista.Select(ToKanbanDto));
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
-    //  GET /api/fabrica/finalizados  — Columna 3 del Kanban
-    // ════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  GET  /api/fabrica/finalizados
+    // ═══════════════════════════════════════════════════════════════════════════
     [HttpGet("finalizados")]
-    [ProducesResponseType(typeof(List<CotizacionKanbanDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetFinalizados()
-    {
-        var lista = await db.Cotizaciones
-            .Include(c => c.Cliente)
-            .Include(c => c.Detalles)
-            .Where(c => c.Estado == "Finalizado")
-            .OrderByDescending(c => c.FechaAprobacion)
-            .Take(50)
-            .ToListAsync();
+    public async Task<IActionResult> GetFinalizados() =>
+        Ok(await GetKanbanByEstado(EstadoOrden.Finalizado));
 
-        return Ok(lista.Select(ToKanbanDto));
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
-    //  PUT /api/fabrica/{id}/iniciar  — Aprobado → EnProduccion
-    // ════════════════════════════════════════════════════════════════════════
-    [HttpPut("{id:int}/iniciar")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  POST /api/fabrica/{id}/iniciar
+    //  Mueve PorIniciar → EnProduccion
+    // ═══════════════════════════════════════════════════════════════════════════
+    [HttpPost("{id:int}/iniciar")]
     public async Task<IActionResult> IniciarOrden(int id)
     {
-        var cotizacion = await db.Cotizaciones.FindAsync(id);
-        if (cotizacion is null)
-            return NotFound(new { mensaje = $"Cotización #{id} no encontrada." });
+        var orden = await db.OrdenesFabrica.FindAsync(id);
+        if (orden is null) return NotFound();
+        if (orden.Estado != EstadoOrden.PorIniciar)
+            return BadRequest("La orden no está en estado PorIniciar.");
 
-        if (cotizacion.Estado != "Aprobado")
-            return BadRequest(new { mensaje = $"Solo se puede iniciar una orden en estado 'Aprobado'. Estado actual: '{cotizacion.Estado}'." });
-
-        cotizacion.Estado = "EnProduccion";
+        orden.Estado      = EstadoOrden.EnProduccion;
+        orden.FechaInicio = DateTime.UtcNow;
         await db.SaveChangesAsync();
-
-        return Ok(new { mensaje = $"Orden #{id} iniciada en producción." });
+        return NoContent();
     }
 
-    // ════════════════════════════════════════════════════════════════════════
-    //  PUT /api/fabrica/{id}/finalizar  — EnProduccion → Finalizado
-    // ════════════════════════════════════════════════════════════════════════
-    [HttpPut("{id:int}/finalizar")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  POST /api/fabrica/{id}/finalizar
+    //  Mueve EnProduccion → Finalizado
+    // ═══════════════════════════════════════════════════════════════════════════
+    [HttpPost("{id:int}/finalizar")]
     public async Task<IActionResult> FinalizarOrden(int id)
     {
-        var cotizacion = await db.Cotizaciones.FindAsync(id);
-        if (cotizacion is null)
-            return NotFound(new { mensaje = $"Cotización #{id} no encontrada." });
+        var orden = await db.OrdenesFabrica.FindAsync(id);
+        if (orden is null) return NotFound();
+        if (orden.Estado != EstadoOrden.EnProduccion)
+            return BadRequest("La orden no está en producción.");
 
-        if (cotizacion.Estado != "EnProduccion")
-            return BadRequest(new { mensaje = $"Solo se puede finalizar una orden en estado 'EnProduccion'. Estado actual: '{cotizacion.Estado}'." });
-
-        cotizacion.Estado = "Finalizado";
+        orden.Estado  = EstadoOrden.Finalizado;
+        orden.FechaFin = DateTime.UtcNow;
         await db.SaveChangesAsync();
-
-        return Ok(new { mensaje = $"Orden #{id} finalizada y lista para entrega." });
+        return NoContent();
     }
 
-    // ════════════════════════════════════════════════════════════════════════
-    //  HELPERS
-    // ════════════════════════════════════════════════════════════════════════
-    private static CotizacionKanbanDto ToKanbanDto(MarmoleraERP.API.Modules.Ventas.Entities.Cotizacion c) => new(
-        Id:              c.Id,
-        NombreCliente:   c.Cliente.NombreCompleto,
-        Telefono:        c.Cliente.Telefono,
-        FechaAprobacion: c.FechaAprobacion,
-        Comentarios:     c.Comentarios,
-        CantidadMesones: c.Detalles.Count,
-        Mesones: c.Detalles.Select(d => new MesonKanbanDto(
-            d.Id,
-            d.NombreMaterial,
-            d.Geometria.ToString(),
-            d.AreaTotal
-        )).ToList()
-    );
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  PUT  /api/fabrica/{id}/asignar-operario
+    // ═══════════════════════════════════════════════════════════════════════════
+    [HttpPut("{id:int}/asignar-operario")]
+    [Authorize(Roles = "Admin,Produccion")]
+    public async Task<IActionResult> AsignarOperario(int id, [FromBody] AsignarOperarioDto dto)
+    {
+        var orden = await db.OrdenesFabrica.FindAsync(id);
+        if (orden is null) return NotFound();
+
+        orden.OperarioId     = dto.OperarioId;
+        orden.OperarioNombre = dto.OperarioNombre;
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  PUT  /api/fabrica/{id}/nota
+    // ═══════════════════════════════════════════════════════════════════════════
+    [HttpPut("{id:int}/nota")]
+    public async Task<IActionResult> AgregarNota(int id, [FromBody] AgregarNotaDto dto)
+    {
+        var orden = await db.OrdenesFabrica.FindAsync(id);
+        if (orden is null) return NotFound();
+
+        orden.Notas = dto.Nota;
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
 }
