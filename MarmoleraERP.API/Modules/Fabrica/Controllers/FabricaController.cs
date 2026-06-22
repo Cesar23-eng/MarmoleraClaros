@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MarmoleraERP.API.Data;
-using MarmoleraERP.API.Modules.Ventas.DTOs;
+using MarmoleraERP.API.Modules.Fabrica.DTOs;
 
 namespace MarmoleraERP.API.Modules.Fabrica.Controllers;
 
@@ -19,7 +19,6 @@ public class FabricaController(AppDbContext db) : ControllerBase
     // ════════════════════════════════════════════════════════════════════════
     //  GET /api/fabrica/por-iniciar  — Columna 1 del Kanban
     // ════════════════════════════════════════════════════════════════════════
-    /// <summary>Cotizaciones aprobadas esperando ser iniciadas en fábrica.</summary>
     [HttpGet("por-iniciar")]
     [ProducesResponseType(typeof(List<CotizacionKanbanDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPorIniciar()
@@ -37,7 +36,6 @@ public class FabricaController(AppDbContext db) : ControllerBase
     // ════════════════════════════════════════════════════════════════════════
     //  GET /api/fabrica/en-produccion  — Columna 2 del Kanban
     // ════════════════════════════════════════════════════════════════════════
-    /// <summary>Cotizaciones actualmente en proceso de fabricación.</summary>
     [HttpGet("en-produccion")]
     [ProducesResponseType(typeof(List<CotizacionKanbanDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetEnProduccion()
@@ -55,7 +53,6 @@ public class FabricaController(AppDbContext db) : ControllerBase
     // ════════════════════════════════════════════════════════════════════════
     //  GET /api/fabrica/finalizados  — Columna 3 del Kanban
     // ════════════════════════════════════════════════════════════════════════
-    /// <summary>Cotizaciones terminadas (histórico reciente: últimas 50).</summary>
     [HttpGet("finalizados")]
     [ProducesResponseType(typeof(List<CotizacionKanbanDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetFinalizados()
@@ -74,7 +71,6 @@ public class FabricaController(AppDbContext db) : ControllerBase
     // ════════════════════════════════════════════════════════════════════════
     //  PUT /api/fabrica/{id}/iniciar  — Aprobado → EnProduccion
     // ════════════════════════════════════════════════════════════════════════
-    /// <summary>El operario confirma que empezó a trabajar en esta orden.</summary>
     [HttpPut("{id:int}/iniciar")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -97,7 +93,6 @@ public class FabricaController(AppDbContext db) : ControllerBase
     // ════════════════════════════════════════════════════════════════════════
     //  PUT /api/fabrica/{id}/finalizar  — EnProduccion → Finalizado
     // ════════════════════════════════════════════════════════════════════════
-    /// <summary>El operario marca la orden como terminada y lista para entrega.</summary>
     [HttpPut("{id:int}/finalizar")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -120,8 +115,7 @@ public class FabricaController(AppDbContext db) : ControllerBase
     // ════════════════════════════════════════════════════════════════════════
     //  HELPERS
     // ════════════════════════════════════════════════════════════════════════
-
-    private static CotizacionKanbanDto ToKanbanDto(Ventas.Entities.Cotizacion c) => new(
+    private static CotizacionKanbanDto ToKanbanDto(MarmoleraERP.API.Modules.Ventas.Entities.Cotizacion c) => new(
         Id:              c.Id,
         NombreCliente:   c.Cliente.NombreCompleto,
         Telefono:        c.Cliente.Telefono,
