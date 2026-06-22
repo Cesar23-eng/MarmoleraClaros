@@ -4,16 +4,19 @@ using MarmoleraERP.API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace MarmoleraERP.API.Migrations
+namespace MarmoleraERP.API.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260622221145_AddNotificaciones")]
+    partial class AddNotificaciones
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -136,48 +139,6 @@ namespace MarmoleraERP.API.Migrations
                     b.ToTable("ServiciosExtras");
                 });
 
-            modelBuilder.Entity("MarmoleraERP.API.Modules.Fabrica.Entities.OrdenFabrica", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CotizacionId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Estado")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("varchar(20)");
-
-                    b.Property<DateTime>("FechaCreacion")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<DateTime?>("FechaFin")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<DateTime?>("FechaInicio")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("Notas")
-                        .HasMaxLength(1000)
-                        .HasColumnType("varchar(1000)");
-
-                    b.Property<string>("OperarioId")
-                        .HasMaxLength(450)
-                        .HasColumnType("varchar(450)");
-
-                    b.Property<string>("OperarioNombre")
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("OrdenesFabrica", (string)null);
-                });
-
             modelBuilder.Entity("MarmoleraERP.API.Modules.Identity.Entities.ApplicationUser", b =>
                 {
                     b.Property<string>("Id")
@@ -200,7 +161,7 @@ namespace MarmoleraERP.API.Migrations
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("tinyint(1)");
 
-                    b.Property<DateTime>("FechaCreacion")
+                    b.Property<DateTime>("FechaRegistro")
                         .HasColumnType("datetime(6)");
 
                     b.Property<bool>("LockoutEnabled")
@@ -209,7 +170,7 @@ namespace MarmoleraERP.API.Migrations
                     b.Property<DateTimeOffset?>("LockoutEnd")
                         .HasColumnType("datetime(6)");
 
-                    b.Property<string>("Nombre")
+                    b.Property<string>("NombreCompleto")
                         .IsRequired()
                         .HasColumnType("longtext");
 
@@ -260,6 +221,11 @@ namespace MarmoleraERP.API.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("DestinoRol")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
                     b.Property<DateTime>("FechaCreacion")
                         .HasColumnType("datetime(6)");
 
@@ -274,20 +240,10 @@ namespace MarmoleraERP.API.Migrations
                     b.Property<int?>("ReferenciaId")
                         .HasColumnType("int");
 
-                    b.Property<string>("RolDestino")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
                     b.Property<string>("Tipo")
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("varchar(40)");
-
-                    b.Property<string>("Titulo")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("varchar(150)");
 
                     b.HasKey("Id");
 
