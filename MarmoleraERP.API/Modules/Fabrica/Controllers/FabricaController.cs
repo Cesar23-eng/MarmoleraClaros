@@ -8,18 +8,11 @@ using MarmoleraERP.API.Modules.Fabrica.Enums;
 
 namespace MarmoleraERP.API.Modules.Fabrica.Controllers;
 
-/// <summary>
-/// Tablero de producción Kanban.
-/// Roles: Admin y Produccion ven todo; Tablet solo puede iniciar/finalizar.
-/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = "Admin,Produccion,Tablet")]
 public class FabricaController(AppDbContext db) : ControllerBase
 {
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  HELPERS
-    // ═══════════════════════════════════════════════════════════════════════════
     private async Task<List<CotizacionKanbanDto>> GetKanbanByEstado(EstadoOrden estado)
     {
         var ordenes = await db.OrdenesFabrica
@@ -41,7 +34,7 @@ public class FabricaController(AppDbContext db) : ControllerBase
             return new CotizacionKanbanDto(
                 OrdenFabricaId: o.Id,
                 CotizacionId:   o.CotizacionId,
-                NombreCliente:  cot?.Cliente?.Nombre ?? "Sin cliente",
+                NombreCliente:  cot?.Cliente?.NombreCompleto ?? "Sin cliente",
                 Telefono:       cot?.Cliente?.Telefono ?? "",
                 Estado:         o.Estado.ToString(),
                 OperarioNombre: o.OperarioNombre,
@@ -55,31 +48,18 @@ public class FabricaController(AppDbContext db) : ControllerBase
         }).ToList();
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  GET  /api/fabrica/por-iniciar
-    // ═══════════════════════════════════════════════════════════════════════════
     [HttpGet("por-iniciar")]
     public async Task<IActionResult> GetPorIniciar() =>
         Ok(await GetKanbanByEstado(EstadoOrden.PorIniciar));
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  GET  /api/fabrica/en-produccion
-    // ═══════════════════════════════════════════════════════════════════════════
     [HttpGet("en-produccion")]
     public async Task<IActionResult> GetEnProduccion() =>
         Ok(await GetKanbanByEstado(EstadoOrden.EnProduccion));
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  GET  /api/fabrica/finalizados
-    // ═══════════════════════════════════════════════════════════════════════════
     [HttpGet("finalizados")]
     public async Task<IActionResult> GetFinalizados() =>
         Ok(await GetKanbanByEstado(EstadoOrden.Finalizado));
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  POST /api/fabrica/{id}/iniciar
-    //  Mueve PorIniciar → EnProduccion
-    // ═══════════════════════════════════════════════════════════════════════════
     [HttpPost("{id:int}/iniciar")]
     public async Task<IActionResult> IniciarOrden(int id)
     {
@@ -94,10 +74,6 @@ public class FabricaController(AppDbContext db) : ControllerBase
         return NoContent();
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  POST /api/fabrica/{id}/finalizar
-    //  Mueve EnProduccion → Finalizado
-    // ═══════════════════════════════════════════════════════════════════════════
     [HttpPost("{id:int}/finalizar")]
     public async Task<IActionResult> FinalizarOrden(int id)
     {
@@ -106,15 +82,12 @@ public class FabricaController(AppDbContext db) : ControllerBase
         if (orden.Estado != EstadoOrden.EnProduccion)
             return BadRequest("La orden no está en producción.");
 
-        orden.Estado  = EstadoOrden.Finalizado;
+        orden.Estado   = EstadoOrden.Finalizado;
         orden.FechaFin = DateTime.UtcNow;
         await db.SaveChangesAsync();
         return NoContent();
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  PUT  /api/fabrica/{id}/asignar-operario
-    // ═══════════════════════════════════════════════════════════════════════════
     [HttpPut("{id:int}/asignar-operario")]
     [Authorize(Roles = "Admin,Produccion")]
     public async Task<IActionResult> AsignarOperario(int id, [FromBody] AsignarOperarioDto dto)
@@ -128,9 +101,6 @@ public class FabricaController(AppDbContext db) : ControllerBase
         return NoContent();
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  PUT  /api/fabrica/{id}/nota
-    // ═══════════════════════════════════════════════════════════════════════════
     [HttpPut("{id:int}/nota")]
     public async Task<IActionResult> AgregarNota(int id, [FromBody] AgregarNotaDto dto)
     {
