@@ -7,6 +7,8 @@ using MarmoleraERP.API.Data;
 using MarmoleraERP.API.Modules.Ventas.DTOs;
 using MarmoleraERP.API.Modules.Ventas.Entities;
 using MarmoleraERP.API.Modules.Ventas.Enums;
+using MarmoleraERP.API.Modules.Fabrica.Entities;
+using MarmoleraERP.API.Modules.Fabrica.Enums;
 
 namespace MarmoleraERP.API.Modules.Ventas.Controllers;
 
@@ -16,34 +18,23 @@ namespace MarmoleraERP.API.Modules.Ventas.Controllers;
 public class CotizacionesController(AppDbContext db) : ControllerBase
 {
     // ════════════════════════════════════════════════════════════════════════
-    //  POST /api/cotizaciones  — Crear cotización con N mesones
+    //  POST /api/cotizaciones
     // ════════════════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// Crea una cotización con uno o varios mesones.
-    /// El servidor calcula el área de cada detalle y el precio total de la cabecera.
-    /// </summary>
     [HttpPost]
     [ProducesResponseType(typeof(CotizacionResponseDto), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CrearCotizacion([FromBody] CotizacionCreateDto dto)
     {
-        // ── 1. Usuario autenticado ────────────────────────────────────────────
         var usuarioId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(usuarioId))
             return Unauthorized(new { mensaje = "No se pudo identificar al usuario desde el token." });
 
-        // ── 2. Validar que exista el cliente ──────────────────────────────────
         var cliente = await db.Clientes.FindAsync(dto.ClienteId);
         if (cliente is null)
             return BadRequest(new { mensaje = $"No existe un cliente con ID {dto.ClienteId}." });
 
-        // ── 3. Validar que venga al menos un detalle ──────────────────────────
         if (dto.Detalles is null || dto.Detalles.Count == 0)
             return BadRequest(new { mensaje = "La cotización debe incluir al menos un mesón." });
 
-        // ── 4. Construir cabecera ─────────────────────────────────────────────
         var cotizacion = new Cotizacion
         {
             UsuarioId     = usuarioId,
@@ -53,9 +44,8 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
             Estado        = "Cotizado"
         };
 
-        // ── 5. Construir y calcular cada detalle ──────────────────────────────
-        var errores = new List<string>();
-        var detalles = new List<DetalleCotizacion>();
+        var errores   = new List<string>();
+        var detalles  = new List<DetalleCotizacion>();
 
         for (int i = 0; i < dto.Detalles.Count; i++)
         {
@@ -83,7 +73,6 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
         cotizacion.Detalles    = detalles;
         cotizacion.PrecioTotal = detalles.Sum(d => d.PrecioSubtotal);
 
-        // ── 6. Persistir ──────────────────────────────────────────────────────
         db.Cotizaciones.Add(cotizacion);
         await db.SaveChangesAsync();
 
@@ -93,17 +82,10 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  PUT /api/cotizaciones/{id}  — Editar cabecera + detalles
+    //  PUT /api/cotizaciones/{id}
     // ════════════════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// Permite editar una cotización solo si está en estado "Cotizado".
-    /// Borra los detalles existentes y los reemplaza con los nuevos, recalculando el total.
-    /// </summary>
     [HttpPut("{id:int}")]
     [ProducesResponseType(typeof(CotizacionResponseDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> EditarCotizacion(int id, [FromBody] CotizacionCreateDto dto)
     {
         var cotizacion = await db.Cotizaciones
@@ -117,7 +99,6 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
         if (cotizacion.Estado != "Cotizado")
             return BadRequest(new { mensaje = $"Solo se pueden editar cotizaciones en estado 'Cotizado'. Estado actual: '{cotizacion.Estado}'." });
 
-        // Validar cliente (puede cambiar)
         var cliente = await db.Clientes.FindAsync(dto.ClienteId);
         if (cliente is null)
             return BadRequest(new { mensaje = $"No existe un cliente con ID {dto.ClienteId}." });
@@ -125,8 +106,7 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
         if (dto.Detalles is null || dto.Detalles.Count == 0)
             return BadRequest(new { mensaje = "La cotización debe incluir al menos un mesón." });
 
-        // Validar y construir nuevos detalles
-        var errores = new List<string>();
+        var errores       = new List<string>();
         var nuevosDetalles = new List<DetalleCotizacion>();
 
         for (int i = 0; i < dto.Detalles.Count; i++)
@@ -152,25 +132,20 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
         if (errores.Count > 0)
             return BadRequest(new { mensaje = "Errores en los detalles.", errores });
 
-        // Reemplazar detalles y recalcular total
         db.DetallesCotizacion.RemoveRange(cotizacion.Detalles);
-
         cotizacion.ClienteId   = dto.ClienteId;
         cotizacion.Comentarios = dto.Comentarios;
         cotizacion.Detalles    = nuevosDetalles;
         cotizacion.PrecioTotal = nuevosDetalles.Sum(d => d.PrecioSubtotal);
 
         await db.SaveChangesAsync();
-
         return Ok(ToDto(cotizacion, cliente));
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  GET /api/cotizaciones  — Historial del usuario autenticado
+    //  GET /api/cotizaciones
     // ════════════════════════════════════════════════════════════════════════
-
     [HttpGet]
-    [ProducesResponseType(typeof(List<CotizacionResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ObtenerMisCotizaciones()
     {
         var usuarioId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -187,12 +162,9 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  GET /api/cotizaciones/{id}  — Por ID
+    //  GET /api/cotizaciones/{id}
     // ════════════════════════════════════════════════════════════════════════
-
     [HttpGet("{id:int}")]
-    [ProducesResponseType(typeof(CotizacionResponseDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ObtenerCotizacion(int id)
     {
         var cotizacion = await db.Cotizaciones
@@ -207,11 +179,9 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  GET /api/cotizaciones/todas  — Vista admin/vendedor
+    //  GET /api/cotizaciones/todas
     // ════════════════════════════════════════════════════════════════════════
-
     [HttpGet("todas")]
-    [ProducesResponseType(typeof(List<CotizacionResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ObtenerTodasLasCotizaciones()
     {
         var lista = await db.Cotizaciones
@@ -224,16 +194,11 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  PUT /api/cotizaciones/{id}/aprobar  — Ventas / Admin
+    //  PUT /api/cotizaciones/{id}/aprobar
+    //  ★ CREA OrdenFabrica automáticamente (si no existe ya)
     // ════════════════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// <summary>Aprueba una cotización: "Cotizado" → "Aprobado" (visible en Tablero de Fábrica).</summary>
     [HttpPut("{id:int}/aprobar")]
     [Authorize(Roles = "Ventas,Admin")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> AprobarCotizacion(int id)
     {
         var cotizacion = await db.Cotizaciones.FindAsync(id);
@@ -243,24 +208,34 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
         if (cotizacion.Estado != "Cotizado")
             return BadRequest(new { mensaje = $"Solo se pueden aprobar cotizaciones en estado 'Cotizado'. Estado actual: '{cotizacion.Estado}'." });
 
+        // 1. Cambiar estado de la cotización
         cotizacion.Estado          = "Aprobado";
         cotizacion.FechaAprobacion = DateTime.UtcNow;
+
+        // 2. Crear OrdenFabrica si no existe ya (idempotente)
+        var yaExiste = await db.OrdenesFabrica
+            .AnyAsync(o => o.CotizacionId == id);
+
+        if (!yaExiste)
+        {
+            db.OrdenesFabrica.Add(new OrdenFabrica
+            {
+                CotizacionId  = id,
+                Estado        = EstadoOrden.PorIniciar,
+                FechaCreacion = DateTime.UtcNow
+            });
+        }
+
         await db.SaveChangesAsync();
 
-        return Ok(new { mensaje = $"Cotización {id} aprobada y enviada al tablero de fábrica." });
+        return Ok(new { mensaje = $"Cotización {id} aprobada. Orden de fábrica creada y visible en el tablero de producción." });
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  GET /api/cotizaciones/pendientes-produccion  — Vista Fábrica
+    //  GET /api/cotizaciones/pendientes-produccion
     // ════════════════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// Devuelve todas las cotizaciones en estado "Aprobado" para el tablero de fábrica.
-    /// Incluye datos del cliente y la lista completa de mesones.
-    /// </summary>
     [HttpGet("pendientes-produccion")]
     [Authorize(Roles = "Produccion,Admin")]
-    [ProducesResponseType(typeof(List<CotizacionResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ObtenerPendientesProduccion()
     {
         var lista = await db.Cotizaciones
@@ -274,15 +249,11 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  PUT /api/cotizaciones/{id}/iniciar-produccion  — Fábrica inicia trabajo
+    //  PUT /api/cotizaciones/{id}/iniciar-produccion
+    //  ★ Sincroniza OrdenFabrica a EnProduccion
     // ════════════════════════════════════════════════════════════════════════
-
-    /// <summary>Inicia la fabricación: "Aprobado" → "EnProduccion".</summary>
     [HttpPut("{id:int}/iniciar-produccion")]
     [Authorize(Roles = "Produccion,Admin")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> IniciarProduccion(int id)
     {
         var cotizacion = await db.Cotizaciones.FindAsync(id);
@@ -293,21 +264,25 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
             return BadRequest(new { mensaje = $"Solo se puede iniciar la producción de cotizaciones 'Aprobadas'. Estado actual: '{cotizacion.Estado}'." });
 
         cotizacion.Estado = "EnProduccion";
-        await db.SaveChangesAsync();
 
+        // Sincronizar OrdenFabrica
+        var orden = await db.OrdenesFabrica
+            .FirstOrDefaultAsync(o => o.CotizacionId == id);
+        if (orden is not null)
+        {
+            orden.Estado      = EstadoOrden.EnProduccion;
+            orden.FechaInicio = DateTime.UtcNow;
+        }
+
+        await db.SaveChangesAsync();
         return Ok(new { mensaje = $"Cotización {id} pasó a 'En Producción'." });
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  GET /api/cotizaciones/en-produccion  — Vista Fábrica (En Proceso)
+    //  GET /api/cotizaciones/en-produccion
     // ════════════════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// Devuelve todas las cotizaciones en estado "EnProduccion".
-    /// </summary>
     [HttpGet("en-produccion")]
     [Authorize(Roles = "Produccion,Admin")]
-    [ProducesResponseType(typeof(List<CotizacionResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ObtenerEnProduccion()
     {
         var lista = await db.Cotizaciones
@@ -321,15 +296,10 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  GET /api/cotizaciones/terminados  — Vista Fábrica (Finalizados)
+    //  GET /api/cotizaciones/terminados
     // ════════════════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// Devuelve todas las cotizaciones en estado "Finalizado".
-    /// </summary>
     [HttpGet("terminados")]
     [Authorize(Roles = "Produccion,Admin")]
-    [ProducesResponseType(typeof(List<CotizacionResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ObtenerTerminados()
     {
         var lista = await db.Cotizaciones
@@ -343,15 +313,11 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  PUT /api/cotizaciones/{id}/finalizar-produccion  — Fábrica termina trabajo
+    //  PUT /api/cotizaciones/{id}/finalizar-produccion
+    //  ★ Sincroniza OrdenFabrica a Finalizado
     // ════════════════════════════════════════════════════════════════════════
-
-    /// <summary>Finaliza la fabricación: "EnProduccion" → "Finalizado".</summary>
     [HttpPut("{id:int}/finalizar-produccion")]
     [Authorize(Roles = "Produccion,Admin")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> FinalizarProduccion(int id)
     {
         var cotizacion = await db.Cotizaciones.FindAsync(id);
@@ -362,28 +328,31 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
             return BadRequest(new { mensaje = $"Solo se puede finalizar la producción de cotizaciones 'EnProduccion'. Estado actual: '{cotizacion.Estado}'." });
 
         cotizacion.Estado = "Finalizado";
-        await db.SaveChangesAsync();
 
+        // Sincronizar OrdenFabrica
+        var orden = await db.OrdenesFabrica
+            .FirstOrDefaultAsync(o => o.CotizacionId == id);
+        if (orden is not null)
+        {
+            orden.Estado   = EstadoOrden.Finalizado;
+            orden.FechaFin = DateTime.UtcNow;
+        }
+
+        await db.SaveChangesAsync();
         return Ok(new { mensaje = $"Cotización {id} pasó a 'Finalizado'." });
     }
 
-    // ════════════════════════════════════════════════════════════════════════
-    //  HELPERS PRIVADOS
-    // ════════════════════════════════════════════════════════════════════════
-
+    // ─── HELPERS ──────────────────────────────────────────────────────────────────────
     private static decimal CalcularArea(DetalleCotizacionCreateDto d) =>
         d.Geometria switch
         {
             PlantillaGeometria.Rectangulo => d.LadoA * d.LadoB,
-
             PlantillaGeometria.Forma_L =>
                 (d.LadoA * d.Ancho!.Value) + ((d.LadoB - d.Ancho.Value) * d.Ancho.Value),
-
             PlantillaGeometria.Forma_U =>
                 (d.LadoA * d.Ancho!.Value)
                 + ((d.LadoB - 2 * d.Ancho.Value) * d.Ancho.Value)
                 + (d.LadoC!.Value * d.Ancho.Value),
-
             _ => throw new ArgumentOutOfRangeException(nameof(d.Geometria), $"Plantilla no reconocida: {d.Geometria}")
         };
 
@@ -400,13 +369,7 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
         };
 
     private static string SerializarMedidas(DetalleCotizacionCreateDto d) =>
-        JsonSerializer.Serialize(new
-        {
-            d.LadoA,
-            d.LadoB,
-            LadoC = d.LadoC,
-            Ancho = d.Ancho
-        });
+        JsonSerializer.Serialize(new { d.LadoA, d.LadoB, LadoC = d.LadoC, Ancho = d.Ancho });
 
     private static CotizacionResponseDto ToDto(Cotizacion c, Cliente cl) =>
         new(
@@ -419,13 +382,8 @@ public class CotizacionesController(AppDbContext db) : ControllerBase
             Cliente: new ClienteResponseDto(cl.Id, cl.NombreCompleto, cl.Telefono,
                                             cl.Direccion, cl.Nit_Ci, cl.FechaRegistro),
             Detalles: c.Detalles.Select(d => new DetalleCotizacionResponseDto(
-                d.Id,
-                d.NombreMaterial,
-                d.Geometria.ToString(),
-                d.MedidasJson,
-                d.PrecioPorM2,
-                d.AreaTotal,
-                d.PrecioSubtotal
+                d.Id, d.NombreMaterial, d.Geometria.ToString(),
+                d.MedidasJson, d.PrecioPorM2, d.AreaTotal, d.PrecioSubtotal
             )).ToList()
         );
 }
