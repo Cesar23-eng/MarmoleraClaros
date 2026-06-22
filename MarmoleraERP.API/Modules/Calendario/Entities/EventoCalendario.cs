@@ -1,40 +1,38 @@
+using MarmoleraERP.API.Modules.Ventas.Entities;
 using MarmoleraERP.API.Modules.Calendario.Enums;
 
 namespace MarmoleraERP.API.Modules.Calendario.Entities;
 
 /// <summary>
-/// Evento en el calendario del sistema.
-/// Colores:
-///   Azul  = TomaDeMedida  (crea oficina)
-///   Amarillo = EntregaEstimada (crea oficina)
-///   Verde = EntregaReal / Programada (crea fábrica)
-/// Todo se guarda automáticamente — sin botón "Guardar" explícito.
+/// Evento en el calendario de la marmolera.
+/// Puede estar vinculado a un Pedido (opcional) o ser un evento independiente.
 /// </summary>
 public class EventoCalendario
 {
-    public int Id { get; set; }
+    public int    Id        { get; set; }
+    public string Titulo    { get; set; } = string.Empty;
+    public TipoEvento Tipo  { get; set; } = TipoEvento.Otro;
 
-    public int? PedidoId { get; set; }
+    public DateTime FechaInicio { get; set; }
+    public DateTime FechaFin    { get; set; }
 
-    public TipoEventoCalendario Tipo { get; set; }
-
-    public DateTime Fecha { get; set; }
+    /// <summary>Color hex elegido por el usuario (ej. "#3B82F6").</summary>
+    public string? Color { get; set; }
 
     public string? Notas { get; set; }
 
-    /// <summary>ID del usuario que creó el evento.</summary>
+    /// <summary>Usuario que creó el evento.</summary>
     public string UsuarioId { get; set; } = string.Empty;
 
+    // ─── Relación opcional con Pedido ────────────────────────────────────────
+    public int?   PedidoId { get; set; }
+    public Pedido? Pedido  { get; set; }
+
+    // ─── Reprogramación ───────────────────────────────────────────────────────
+    public bool    FueReprogramado       { get; set; } = false;
+    public string? MotivoReprogramacion  { get; set; }
+    public DateTime? FechaOriginal       { get; set; }
+
+    // ─── Metadata ─────────────────────────────────────────────────────────────
     public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
-
-    public DateTime? FechaModificacion { get; set; }
-
-    /// <summary>Indica si el evento fue reprogramado.</summary>
-    public bool Reprogramado { get; set; } = false;
-
-    /// <summary>Motivo de reprogramación o problema reportado.</summary>
-    public string? MotivoReprogramacion { get; set; }
-
-    // Navegación
-    public MarmoleraERP.API.Modules.Ventas.Entities.Pedido? Pedido { get; set; }
 }
