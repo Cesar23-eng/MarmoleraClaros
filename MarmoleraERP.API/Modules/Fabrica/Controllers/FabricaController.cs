@@ -3,73 +3,136 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MarmoleraERP.API.Data;
 using MarmoleraERP.API.Modules.Ventas.DTOs;
-using MarmoleraERP.API.Modules.Ventas.Enums;
 
 namespace MarmoleraERP.API.Modules.Fabrica.Controllers;
 
+/// <summary>
+/// Tablero de fábrica: gestiona el flujo de producción de cotizaciones aprobadas.
+/// Solo expone datos operativos (sin precios) al rol Produccion.
+/// Flujo: Aprobado → EnProduccion → Finalizado
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = "Produccion,Admin")]
-public class FabricaController : ControllerBase
+public class FabricaController(AppDbContext db) : ControllerBase
 {
-    private readonly AppDbContext _db;
-
-    public FabricaController(AppDbContext db) => _db = db;
-
-    /// <summary>
-    /// Tablero Kanban: devuelve pedidos en estados de producción activa.
-    /// ⚠️ El DTO PedidoKanbanDto NO incluye ningún campo de precio o total.
-    /// </summary>
-    [HttpGet("kanban")]
-    [ProducesResponseType(typeof(List<PedidoKanbanDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetKanban()
+    // ════════════════════════════════════════════════════════════════════════
+    //  GET /api/fabrica/por-iniciar  — Columna 1 del Kanban
+    // ════════════════════════════════════════════════════════════════════════
+    /// <summary>Cotizaciones aprobadas esperando ser iniciadas en fábrica.</summary>
+    [HttpGet("por-iniciar")]
+    [ProducesResponseType(typeof(List<CotizacionKanbanDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPorIniciar()
     {
-        var estados = new[] { EstadoPedido.Aprobado, EstadoPedido.EnCorte, EstadoPedido.EnPulido, EstadoPedido.Listo };
-
-        var pedidos = await _db.Pedidos
-            .Where(p => estados.Contains(p.Estado))
-            .Include(p => p.Cliente)
-            .Include(p => p.Geometrias)
-                .ThenInclude(g => g.Material)
-            .Include(p => p.Geometrias)
-                .ThenInclude(g => g.ServiciosExtras)
-                    .ThenInclude(e => e.ServicioExtra)
-            .Select(p => new PedidoKanbanDto(
-                p.Id,
-                p.ClienteId,
-                p.Cliente.NombreCompleto,
-                p.FechaCreacion,
-                p.FechaEntregaEstimada,
-                p.Estado.ToString(),
-                p.Geometrias.Select(g => new DetalleKanbanDto(
-                    g.Id,
-                    g.Material.Nombre,
-                    g.Material.Categoria,
-                    g.PlantillaUsada.ToString(),
-                    g.LadoA, g.LadoB, g.LadoC, g.Ancho,
-                    g.AreaCalculadaM2,
-                    g.ServiciosExtras.Select(e => e.ServicioExtra.Descripcion).ToList()
-                )).ToList()
-            ))
+        var lista = await db.Cotizaciones
+            .Include(c => c.Cliente)
+            .Include(c => c.Detalles)
+            .Where(c => c.Estado == "Aprobado")
+            .OrderBy(c => c.FechaAprobacion)
             .ToListAsync();
 
-        return Ok(pedidos);
+        return Ok(lista.Select(ToKanbanDto));
     }
 
-    /// <summary>
-    /// Actualiza el estado de un pedido en la línea de producción.
-    /// </summary>
-    [HttpPut("{id:int}/estado")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> CambiarEstado(int id, [FromBody] CambiarEstadoDto dto)
+    // ════════════════════════════════════════════════════════════════════════
+    //  GET /api/fabrica/en-produccion  — Columna 2 del Kanban
+    // ════════════════════════════════════════════════════════════════════════
+    /// <summary>Cotizaciones actualmente en proceso de fabricación.</summary>
+    [HttpGet("en-produccion")]
+    [ProducesResponseType(typeof(List<CotizacionKanbanDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetEnProduccion()
     {
-        var pedido = await _db.Pedidos.FindAsync(id);
-        if (pedido is null) return NotFound(new { message = $"Pedido {id} no encontrado." });
+        var lista = await db.Cotizaciones
+            .Include(c => c.Cliente)
+            .Include(c => c.Detalles)
+            .Where(c => c.Estado == "EnProduccion")
+            .OrderBy(c => c.FechaAprobacion)
+            .ToListAsync();
 
-        pedido.Estado = dto.NuevoEstado;
-        await _db.SaveChangesAsync();
-
-        return NoContent();
+        return Ok(lista.Select(ToKanbanDto));
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  GET /api/fabrica/finalizados  — Columna 3 del Kanban
+    // ════════════════════════════════════════════════════════════════════════
+    /// <summary>Cotizaciones terminadas (histórico reciente: últimas 50).</summary>
+    [HttpGet("finalizados")]
+    [ProducesResponseType(typeof(List<CotizacionKanbanDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetFinalizados()
+    {
+        var lista = await db.Cotizaciones
+            .Include(c => c.Cliente)
+            .Include(c => c.Detalles)
+            .Where(c => c.Estado == "Finalizado")
+            .OrderByDescending(c => c.FechaAprobacion)
+            .Take(50)
+            .ToListAsync();
+
+        return Ok(lista.Select(ToKanbanDto));
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  PUT /api/fabrica/{id}/iniciar  — Aprobado → EnProduccion
+    // ════════════════════════════════════════════════════════════════════════
+    /// <summary>El operario confirma que empezó a trabajar en esta orden.</summary>
+    [HttpPut("{id:int}/iniciar")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> IniciarOrden(int id)
+    {
+        var cotizacion = await db.Cotizaciones.FindAsync(id);
+        if (cotizacion is null)
+            return NotFound(new { mensaje = $"Cotización #{id} no encontrada." });
+
+        if (cotizacion.Estado != "Aprobado")
+            return BadRequest(new { mensaje = $"Solo se puede iniciar una orden en estado 'Aprobado'. Estado actual: '{cotizacion.Estado}'." });
+
+        cotizacion.Estado = "EnProduccion";
+        await db.SaveChangesAsync();
+
+        return Ok(new { mensaje = $"Orden #{id} iniciada en producción." });
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  PUT /api/fabrica/{id}/finalizar  — EnProduccion → Finalizado
+    // ════════════════════════════════════════════════════════════════════════
+    /// <summary>El operario marca la orden como terminada y lista para entrega.</summary>
+    [HttpPut("{id:int}/finalizar")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> FinalizarOrden(int id)
+    {
+        var cotizacion = await db.Cotizaciones.FindAsync(id);
+        if (cotizacion is null)
+            return NotFound(new { mensaje = $"Cotización #{id} no encontrada." });
+
+        if (cotizacion.Estado != "EnProduccion")
+            return BadRequest(new { mensaje = $"Solo se puede finalizar una orden en estado 'EnProduccion'. Estado actual: '{cotizacion.Estado}'." });
+
+        cotizacion.Estado = "Finalizado";
+        await db.SaveChangesAsync();
+
+        return Ok(new { mensaje = $"Orden #{id} finalizada y lista para entrega." });
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  HELPERS
+    // ════════════════════════════════════════════════════════════════════════
+
+    private static CotizacionKanbanDto ToKanbanDto(Ventas.Entities.Cotizacion c) => new(
+        Id:              c.Id,
+        NombreCliente:   c.Cliente.NombreCompleto,
+        Telefono:        c.Cliente.Telefono,
+        FechaAprobacion: c.FechaAprobacion,
+        Comentarios:     c.Comentarios,
+        CantidadMesones: c.Detalles.Count,
+        Mesones: c.Detalles.Select(d => new MesonKanbanDto(
+            d.Id,
+            d.NombreMaterial,
+            d.Geometria.ToString(),
+            d.AreaTotal
+        )).ToList()
+    );
 }
