@@ -2,10 +2,16 @@ namespace MarmoleraERP.API.Modules.Notificaciones.Enums;
 
 public enum TipoNotificacion
 {
-    NuevaCotizacion,
+    // Ventas
+    CotizacionCreada,
     CotizacionAprobada,
-    OrdenIniciada,
-    OrdenFinalizada,
-    EventoProximo,
+    CotizacionRechazada,
+    PedidoCreado,
+
+    // Fábrica
+    OrdenFabricaIniciada,
+    OrdenFabricaFinalizada,
+
+    // General
     General
 }

@@ -1,17 +1,29 @@
 export type TipoNotificacion =
-  | 'NuevaCotizacion'
+  | 'CotizacionCreada'
   | 'CotizacionAprobada'
-  | 'OrdenIniciada'
-  | 'OrdenFinalizada'
-  | 'EventoProximo'
+  | 'CotizacionRechazada'
+  | 'PedidoCreado'
+  | 'OrdenFabricaIniciada'
+  | 'OrdenFabricaFinalizada'
   | 'General';
 
 export interface NotificacionDto {
   id: number;
-  tipo: TipoNotificacion;
+  titulo: string;
   mensaje: string;
-  destinoRol: string;
+  rolDestino: string;
+  tipo: TipoNotificacion;
+  referenciaId: number | null;
   leida: boolean;
   fechaCreacion: string;
-  referenciaId?: number;
 }
+
+export const ICONO_TIPO: Record<TipoNotificacion, string> = {
+  CotizacionCreada:        '📋',
+  CotizacionAprobada:      '✅',
+  CotizacionRechazada:     '❌',
+  PedidoCreado:            '🛒',
+  OrdenFabricaIniciada:    '🔧',
+  OrdenFabricaFinalizada:  '📦',
+  General:                 '🔔',
+};

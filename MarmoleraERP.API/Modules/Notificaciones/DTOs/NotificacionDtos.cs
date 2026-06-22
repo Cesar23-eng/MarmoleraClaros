@@ -1,25 +1,22 @@
-using System.ComponentModel.DataAnnotations;
 using MarmoleraERP.API.Modules.Notificaciones.Enums;
 
 namespace MarmoleraERP.API.Modules.Notificaciones.DTOs;
 
-// ─── INPUT ───────────────────────────────────────────────────────────────
-
-public record CrearNotificacionDto(
-    TipoNotificacion Tipo,
-    [Required, MaxLength(500)] string Mensaje,
-    [Required, MaxLength(50)]  string DestinoRol,
-    int? ReferenciaId = null
-);
-
-// ─── OUTPUT ───────────────────────────────────────────────────────────────
-
 public record NotificacionDto(
     int              Id,
-    string           Tipo,
+    string           Titulo,
     string           Mensaje,
-    string           DestinoRol,
+    string           RolDestino,
+    TipoNotificacion Tipo,
+    int?             ReferenciaId,
     bool             Leida,
-    DateTime         FechaCreacion,
-    int?             ReferenciaId
+    DateTime         FechaCreacion
+);
+
+public record CrearNotificacionDto(
+    string           Titulo,
+    string           Mensaje,
+    string           RolDestino,
+    TipoNotificacion Tipo,
+    int?             ReferenciaId = null
 );
