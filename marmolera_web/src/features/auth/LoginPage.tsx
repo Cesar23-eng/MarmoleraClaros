@@ -5,11 +5,19 @@ import { apiClient } from '../../core/api/apiClient';
 
 // Cuentas mock para probar sin la API encendida
 const MOCK_USERS: Record<string, { password: string; role: UserRole }> = {
-  'admin@claros.com':       { password: '123456', role: 'Admin' },
-  'ventas@claros.com':      { password: '123456', role: 'Ventas' },
-  'fabrica@claros.com':     { password: '123456', role: 'Produccion' },
-  'contabilidad@claros.com':{ password: '123456', role: 'Contabilidad' },
-  'tablet@claros.com':      { password: '123456', role: 'Tablet' },
+  admin:        { password: '123456', role: 'Admin' },
+  ventas:       { password: '123456', role: 'Ventas' },
+  fabrica:      { password: '123456', role: 'Produccion' },
+  contabilidad: { password: '123456', role: 'Contabilidad' },
+  tablet:       { password: '123456', role: 'Tablet' },
+  julio:        { password: 'julio123',    role: 'Admin' },
+  cesar:        { password: 'cesar123',    role: 'Admin' },
+  juliana:      { password: 'juliana123',  role: 'Ventas' },
+  ana:          { password: 'ana123',      role: 'Ventas' },
+  mari:         { password: 'mari123',     role: 'Ventas' },
+  javier:       { password: 'javier123',   role: 'Produccion' },
+  marco:        { password: 'marco123',    role: 'Produccion' },
+  sheila:       { password: 'sheila123',   role: 'Contabilidad' },
 };
 
 const ROLE_HOME: Record<UserRole, string> = {
@@ -21,7 +29,7 @@ const ROLE_HOME: Record<UserRole, string> = {
 };
 
 export default function LoginPage() {
-  const [email, setEmail]       = useState('');
+  const [usuario, setUsuario]   = useState('');
   const [password, setPassword] = useState('');
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(false);
@@ -36,18 +44,18 @@ export default function LoginPage() {
 
     try {
       // Intentar contra la API real
-      const { data } = await apiClient.post('/auth/login', { email, password });
-      setAuth(data.token, data.role as UserRole, email);
-      navigate(ROLE_HOME[data.role as UserRole] ?? '/ventas', { replace: true });
+      const { data } = await apiClient.post('/auth/login-usuario', { usuario, password });
+      setAuth(data.accessToken, data.roles?.[0] as UserRole, data.email ?? usuario);
+      navigate(ROLE_HOME[data.roles?.[0] as UserRole] ?? '/ventas', { replace: true });
     } catch {
       // Fallback: mock local mientras la API no está levantada
-      const mock = MOCK_USERS[email.toLowerCase()];
+      const mock = MOCK_USERS[usuario.toLowerCase()];
       if (mock && mock.password === password) {
-        setAuth('mock-token', mock.role, email);
+        setAuth('mock-token', mock.role, `${usuario}@marmolera.com`);
         navigate(ROLE_HOME[mock.role], { replace: true });
         return;
       }
-      setError('Correo o contraseña incorrectos.');
+      setError('Usuario o contraseña incorrectos.');
     } finally {
       setLoading(false);
     }
@@ -78,13 +86,15 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Correo electrónico</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Usuario</label>
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@claros.com"
+                type="text"
+                value={usuario}
+                onChange={(e) => setUsuario(e.target.value)}
+                placeholder="ej: juliana"
                 required
+                autoComplete="username"
+                autoCapitalize="none"
                 className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
               />
             </div>
@@ -97,6 +107,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
+                autoComplete="current-password"
                 className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
               />
             </div>
@@ -110,11 +121,6 @@ export default function LoginPage() {
             </button>
           </form>
         </div>
-
-        {/* Hint desarrollo */}
-        <p className="text-center text-xs text-slate-400 mt-4">
-          Mock (sin API): admin@claros.com / 123456
-        </p>
       </div>
     </div>
   );
