@@ -11,111 +11,87 @@ namespace MarmoleraERP.API.Modules.Identity.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class AuthController : ControllerBase
+public class AuthController(
+    UserManager<ApplicationUser>  userManager,
+    SignInManager<ApplicationUser> signInManager,
+    IConfiguration config) : ControllerBase
 {
-    private readonly UserManager<ApplicationUser> _userManager;
-    private readonly RoleManager<IdentityRole> _roleManager;
-    private readonly IConfiguration _config;
-
-    public AuthController(
-        UserManager<ApplicationUser> userManager,
-        RoleManager<IdentityRole> roleManager,
-        IConfiguration config)
-    {
-        _userManager = userManager;
-        _roleManager = roleManager;
-        _config = config;
-    }
-
-    /// <summary>
-    /// Autentica al usuario y devuelve un JWT con los claims del rol.
-    /// </summary>
+    // ════════════════════════════════════════════════════════════════════════
+    //  POST /api/auth/login
+    // ════════════════════════════════════════════════════════════════════════
     [HttpPost("login")]
-    [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(LoginResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> Login([FromBody] LoginRequestDto dto)
+    public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
-        var user = await _userManager.FindByEmailAsync(dto.Email);
-        if (user == null || !await _userManager.CheckPasswordAsync(user, dto.Password))
-            return Unauthorized(new { message = "Credenciales incorrectas." });
+        var user = await userManager.FindByEmailAsync(dto.Email);
+        if (user is null || !user.Activo)
+            return Unauthorized(new { mensaje = "Credenciales inválidas o usuario inactivo." });
 
-        var userRoles = await _userManager.GetRolesAsync(user);
-        var rol = userRoles.FirstOrDefault() ?? "Sin Rol";
+        var result = await signInManager.CheckPasswordSignInAsync(user, dto.Password, lockoutOnFailure: false);
+        if (!result.Succeeded)
+            return Unauthorized(new { mensaje = "Credenciales inválidas." });
 
-        var token = GenerateJwt(user, userRoles);
+        var roles = await userManager.GetRolesAsync(user);
+        var token = GenerarToken(user, roles);
 
-        return Ok(new AuthResponseDto(
-            Token: new JwtSecurityTokenHandler().WriteToken(token),
-            Email: user.Email!,
-            NombreCompleto: user.NombreCompleto,
-            Rol: rol,
-            Expiracion: token.ValidTo
-        ));
+        return Ok(new LoginResponseDto(token, user.Id, user.Email!, user.Nombre, roles.ToList()));
     }
 
-    /// <summary>
-    /// Crea un nuevo usuario y le asigna un rol.
-    /// Si el rol aún no existe en la BD, lo crea automáticamente.
-    /// </summary>
+    // ════════════════════════════════════════════════════════════════════════
+    //  POST /api/auth/register  (solo Admin en producción, abierto en dev)
+    // ════════════════════════════════════════════════════════════════════════
     [HttpPost("register")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> Register([FromBody] RegisterRequestDto dto)
+    public async Task<IActionResult> Register([FromBody] RegisterDto dto)
     {
-        // 1. Verificar/crear el rol
-        if (!await _roleManager.RoleExistsAsync(dto.Role))
-        {
-            var roleResult = await _roleManager.CreateAsync(new IdentityRole(dto.Role));
-            if (!roleResult.Succeeded)
-                return BadRequest(new { errors = roleResult.Errors.Select(e => e.Description) });
-        }
+        if (await userManager.FindByEmailAsync(dto.Email) is not null)
+            return BadRequest(new { mensaje = "Ya existe un usuario con ese email." });
 
-        // 2. Crear el usuario
         var user = new ApplicationUser
         {
-            UserName       = dto.Email,
-            Email          = dto.Email,
-            NombreCompleto = dto.NombreCompleto
+            UserName      = dto.Email,
+            Email         = dto.Email,
+            Nombre        = dto.Nombre,
+            Activo        = true,
+            FechaCreacion = DateTime.UtcNow
         };
 
-        var createResult = await _userManager.CreateAsync(user, dto.Password);
-        if (!createResult.Succeeded)
-            return BadRequest(new { errors = createResult.Errors.Select(e => e.Description) });
+        var result = await userManager.CreateAsync(user, dto.Password);
+        if (!result.Succeeded)
+            return BadRequest(new { errores = result.Errors.Select(e => e.Description) });
 
-        // 3. Asignar el rol
-        var roleAssignResult = await _userManager.AddToRoleAsync(user, dto.Role);
-        if (!roleAssignResult.Succeeded)
-            return BadRequest(new { errors = roleAssignResult.Errors.Select(e => e.Description) });
+        if (!string.IsNullOrWhiteSpace(dto.Rol))
+            await userManager.AddToRoleAsync(user, dto.Rol);
 
-        return Ok(new { message = $"Usuario '{dto.Email}' creado exitosamente con rol '{dto.Role}'." });
+        return StatusCode(201, new { mensaje = "Usuario creado correctamente.", userId = user.Id });
     }
 
-    // ─── Helper privado ───────────────────────────────────────────────────────
-    private JwtSecurityToken GenerateJwt(ApplicationUser user, IList<string> userRoles)
+    // ─── Helper: genera JWT ─────────────────────────────────────────────────────────
+    private string GenerarToken(ApplicationUser user, IList<string> roles)
     {
-        var jwtSettings = _config.GetSection("JwtSettings");
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]!));
+        var jwtSettings = config.GetSection("JwtSettings");
+        var key         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]!));
+        var creds       = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var claims = new List<Claim>
         {
-            new(JwtRegisteredClaimNames.Sub,   user.Id),
-            new(JwtRegisteredClaimNames.Email, user.Email!),
-            new(JwtRegisteredClaimNames.Jti,   Guid.NewGuid().ToString()),
-            new(ClaimTypes.Name,               user.NombreCompleto),
+            new(ClaimTypes.NameIdentifier, user.Id),
+            new(ClaimTypes.Email,          user.Email!),
+            new("nombre",                  user.Nombre),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         };
+        claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
 
-        // Inyectar cada rol como un claim independiente
-        foreach (var userRole in userRoles)
-        {
-            claims.Add(new Claim(ClaimTypes.Role, userRole));
-        }
-
-        return new JwtSecurityToken(
-            issuer:   jwtSettings["Issuer"],
-            audience: jwtSettings["Audience"],
-            claims:   claims,
-            expires:  DateTime.UtcNow.AddHours(int.Parse(jwtSettings["ExpiresInHours"] ?? "8")),
-            signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
+        var token = new JwtSecurityToken(
+            issuer:             jwtSettings["Issuer"],
+            audience:           jwtSettings["Audience"],
+            claims:             claims,
+            expires:            DateTime.UtcNow.AddMinutes(double.Parse(jwtSettings["ExpiresInMinutes"]!)),
+            signingCredentials: creds
         );
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 }
