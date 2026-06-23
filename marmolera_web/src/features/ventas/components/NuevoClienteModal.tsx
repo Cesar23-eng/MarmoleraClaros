@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { clientesService } from '../services/clientesService';
-import type { ClienteCreateDto } from '../../../types/ventas';
+import type { ClienteCreateDto, ClienteResponseDto } from '../../../types/ventas';
 
 interface Props {
   onClose: () => void;
-  onCreado: (clienteId: number) => void;
+  // Ahora devuelve el cliente completo, no solo el id
+  onCreado: (cliente: ClienteResponseDto) => void;
 }
 
 export default function NuevoClienteModal({ onClose, onCreado }: Props) {
@@ -29,7 +30,8 @@ export default function NuevoClienteModal({ onClose, onCreado }: Props) {
     try {
       setLoading(true);
       const nuevo = await clientesService.crear(form);
-      onCreado(nuevo.id);
+      // Pasar el cliente completo (con nombre real) al padre
+      onCreado(nuevo);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { mensaje?: string } } })?.response?.data?.mensaje;
       setError(msg ?? 'Error al guardar el cliente.');
@@ -41,7 +43,6 @@ export default function NuevoClienteModal({ onClose, onCreado }: Props) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <h2 className="text-base font-bold text-slate-800">Nuevo Cliente</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition">

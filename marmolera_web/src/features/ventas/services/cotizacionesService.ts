@@ -19,7 +19,11 @@ export const cotizacionesService = {
   getById: (id: number) =>
     apiClient.get<CotizacionResponseDto>(`${BASE}/${id}`).then((r) => r.data),
 
-  /** Crear nueva cotización */
+  /** Crear con payload ya en PascalCase (para record posicional de C#) */
+  crearRaw: (payload: object) =>
+    apiClient.post<CotizacionResponseDto>(BASE, payload).then((r) => r.data),
+
+  /** Crear (alias tipado, usa crearRaw internamente) */
   crear: (dto: CotizacionCreateDto) =>
     apiClient.post<CotizacionResponseDto>(BASE, dto).then((r) => r.data),
 

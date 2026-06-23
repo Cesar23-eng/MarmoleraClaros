@@ -28,7 +28,7 @@ interface Props {
 
 export default function NuevaCotizacionModal({ clientes: clientesIniciales, onClose, onCreada }: Props) {
   const [clientes, setClientes] = useState<ClienteResponseDto[]>(clientesIniciales);
-  const [clienteId, setClienteId]   = useState<number>(0);
+  const [clienteId, setClienteId]     = useState<number>(0);
   const [comentarios, setComentarios] = useState('');
   const [detalles, setDetalles]       = useState<DetalleCotizacionCreateDto[]>([mesonVacio()]);
   const [loading, setLoading]         = useState(false);
@@ -61,11 +61,11 @@ export default function NuevaCotizacionModal({ clientes: clientesIniciales, onCl
     });
   };
 
-  const agregarMeson   = () => setDetalles((p) => [...p, mesonVacio()]);
-  const eliminarMeson  = (i: number) => setDetalles((p) => p.filter((_, idx) => idx !== i));
+  const agregarMeson  = () => setDetalles((p) => [...p, mesonVacio()]);
+  const eliminarMeson = (i: number) => setDetalles((p) => p.filter((_, idx) => idx !== i));
 
-  // Cuando se crea un cliente desde el sub-modal, lo agrega al select y lo selecciona
-  const handleClienteCreado = (clienteNuevo: import('../../../types/ventas').ClienteResponseDto) => {
+  // Recibe el cliente COMPLETO desde NuevoClienteModal y lo agrega al select con su nombre real
+  const handleClienteCreado = (clienteNuevo: ClienteResponseDto) => {
     setClientes((prev) => [...prev, clienteNuevo]);
     setClienteId(clienteNuevo.id);
     setModalCliente(false);
@@ -76,15 +76,31 @@ export default function NuevaCotizacionModal({ clientes: clientesIniciales, onCl
     setError('');
     if (!clienteId) { setError('Selecciona un cliente.'); return; }
 
+    // Mapear a PascalCase para que el record posicional de C# lo deserialice correctamente
     const dto: CotizacionCreateDto = {
       clienteId,
       comentarios: comentarios || undefined,
       detalles,
     };
 
+    // Construir el payload con PascalCase manualmente
+    const payload = {
+      ClienteId:   dto.clienteId,
+      Comentarios: dto.comentarios ?? null,
+      Detalles: dto.detalles.map((d) => ({
+        NombreMaterial: d.nombreMaterial,
+        Geometria:      d.geometria,
+        LadoA:          d.ladoA,
+        LadoB:          d.ladoB,
+        LadoC:          d.ladoC ?? null,
+        Ancho:          d.ancho ?? null,
+        PrecioPorM2:    d.precioPorM2,
+      })),
+    };
+
     try {
       setLoading(true);
-      await cotizacionesService.crear(dto);
+      await cotizacionesService.crearRaw(payload);
       onCreada();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { mensaje?: string } } })?.response?.data?.mensaje;
@@ -212,12 +228,7 @@ export default function NuevaCotizacionModal({ clientes: clientesIniciales, onCl
       {modalCliente && (
         <NuevoClienteModal
           onClose={() => setModalCliente(false)}
-          onCreado={(id) => {
-            // Construimos un ClienteResponseDto mínimo para el select
-            // El hook useClientes del dashboard refrescará la lista real al cerrar
-            const temp = { id, nombreCompleto: 'Cliente nuevo', telefono: '', direccion: '', referencia: '' };
-            handleClienteCreado(temp);
-          }}
+          onCreado={handleClienteCreado}
         />
       )}
     </>
