@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -15,7 +16,7 @@ var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseMySql(connStr, ServerVersion.AutoDetect(connStr)));
 
-// ─── Identity ──────────────────────────────────────────────────────────────
+// ─── Identity ────────────────────────────────────────────────────
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
     options.Password.RequireDigit           = false;
@@ -26,7 +27,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
-// ─── JWT ─────────────────────────────────────────────────────────────────────
+// ─── JWT ──────────────────────────────────────────────────────────────
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 builder.Services.AddAuthentication(options =>
 {
@@ -54,8 +55,16 @@ builder.Services.AddAuthorization();
 // ─── Notificaciones (Scoped: una instancia por request HTTP) ───────────────────
 builder.Services.AddScoped<INotificacionService, NotificacionService>();
 
-// ─── Controllers + Swagger ──────────────────────────────────────────────────
-builder.Services.AddControllers();
+// ─── Controllers + JSON options ───────────────────────────────────────────
+builder.Services.AddControllers()
+    .AddJsonOptions(opts =>
+    {
+        // Acepta tanto camelCase como PascalCase del frontend
+        opts.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+        // Serializa/deserializa enums como strings ("Rectangulo", "Forma_L", "Forma_U")
+        opts.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -92,7 +101,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// ─── Aplicar migraciones + Seed de usuarios ──────────────────────────────────
+// ─── Aplicar migraciones + Seed de usuarios ─────────────────────────────────
 using (var scope = app.Services.CreateScope())
 {
     var db          = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -101,42 +110,27 @@ using (var scope = app.Services.CreateScope())
 
     db.Database.Migrate();
 
-    // Roles definidos en el sistema
     string[] roles = ["Admin", "Ventas", "Produccion", "Contabilidad", "Tablet"];
     foreach (var rol in roles)
         if (!await roleManager.RoleExistsAsync(rol))
             await roleManager.CreateAsync(new IdentityRole(rol));
 
-    // ┌──────────────────────────────────────────────────────────────────────────┐
-    // │  Tabla de usuarios semilla                                               │
-    // │  Formato: (email, password, nombre, roles[])                             │
-    // │  Un usuario puede tener MÚLTIPLES roles (ej: Juliana → Ventas + Tablet)  │
-    // └──────────────────────────────────────────────────────────────────────────┘
     var seedUsers = new (string Email, string Password, string Nombre, string[] Roles)[]
     {
-        // ── Gerencia / Admin ──────────────────────────────────────────────────
         ("julio@marmolera.com",    "julio123",   "Julio",   ["Admin"]),
         ("cesar@marmolera.com",    "cesar123",   "Cesar",   ["Admin"]),
-
-        // ── Ventas ────────────────────────────────────────────────────────────
-        // Juliana y Ana y Mari también tienen acceso a Tablet (multi-rol)
         ("juliana@marmolera.com",  "juliana123", "Juliana", ["Ventas", "Tablet"]),
         ("ana@marmolera.com",      "ana123",     "Ana",     ["Ventas", "Tablet"]),
         ("mari@marmolera.com",     "mari123",    "Mari",    ["Ventas", "Tablet"]),
-
-        // ── Fábrica / Producción ──────────────────────────────────────────────
         ("javier@marmolera.com",   "javier123",  "Javier",  ["Produccion"]),
         ("marco@marmolera.com",    "marco123",   "Marco",   ["Produccion"]),
-        // Julio ya está creado arriba como Admin, no se duplica
-
-        // ── Finanzas / Contabilidad ───────────────────────────────────────────
         ("sheila@marmolera.com",   "sheila123",  "Sheila",  ["Contabilidad"]),
     };
 
     foreach (var (email, password, nombre, userRoles) in seedUsers)
     {
         if (await userManager.FindByEmailAsync(email) is not null)
-            continue; // ya existe, no tocar
+            continue;
 
         var user = new ApplicationUser
         {
