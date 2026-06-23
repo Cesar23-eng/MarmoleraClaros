@@ -5,27 +5,27 @@ import { apiClient } from '../../core/api/apiClient';
 
 // Cuentas mock para probar sin la API encendida
 const MOCK_USERS: Record<string, { password: string; role: UserRole }> = {
-  admin:        { password: '123456', role: 'Admin' },
-  ventas:       { password: '123456', role: 'Ventas' },
-  fabrica:      { password: '123456', role: 'Produccion' },
-  contabilidad: { password: '123456', role: 'Contabilidad' },
-  tablet:       { password: '123456', role: 'Tablet' },
-  julio:        { password: 'julio123',    role: 'Admin' },
-  cesar:        { password: 'cesar123',    role: 'Admin' },
-  juliana:      { password: 'juliana123',  role: 'Ventas' },
-  ana:          { password: 'ana123',      role: 'Ventas' },
-  mari:         { password: 'mari123',     role: 'Ventas' },
-  javier:       { password: 'javier123',   role: 'Produccion' },
-  marco:        { password: 'marco123',    role: 'Produccion' },
-  sheila:       { password: 'sheila123',   role: 'Contabilidad' },
+  admin:        { password: '123456',       role: 'Admin' },
+  ventas:       { password: '123456',       role: 'Ventas' },
+  fabrica:      { password: '123456',       role: 'Produccion' },
+  contabilidad: { password: '123456',       role: 'Contabilidad' },
+  tablet:       { password: '123456',       role: 'Tablet' },
+  julio:        { password: 'julio123',     role: 'Admin' },
+  cesar:        { password: 'cesar123',     role: 'Admin' },
+  juliana:      { password: 'juliana123',   role: 'Ventas' },
+  ana:          { password: 'ana123',       role: 'Ventas' },
+  mari:         { password: 'mari123',      role: 'Ventas' },
+  javier:       { password: 'javier123',    role: 'Produccion' },
+  marco:        { password: 'marco123',     role: 'Produccion' },
+  sheila:       { password: 'sheila123',    role: 'Contabilidad' },
 };
 
 const ROLE_HOME: Record<UserRole, string> = {
-  Admin: '/ventas',
-  Ventas: '/ventas',
-  Produccion: '/fabrica',
-  Contabilidad: '/finanzas',
-  Tablet: '/tablet',
+  Admin:         '/ventas',
+  Ventas:        '/ventas',
+  Produccion:    '/fabrica',
+  Contabilidad:  '/finanzas',
+  Tablet:        '/tablet',
 };
 
 export default function LoginPage() {
@@ -45,10 +45,12 @@ export default function LoginPage() {
     try {
       // Intentar contra la API real
       const { data } = await apiClient.post('/auth/login-usuario', { usuario, password });
-      setAuth(data.accessToken, data.roles?.[0] as UserRole, data.email ?? usuario);
-      navigate(ROLE_HOME[data.roles?.[0] as UserRole] ?? '/ventas', { replace: true });
+      const role = data.roles?.[0] as UserRole;
+      // Guardar accessToken + refreshToken en el store
+      setAuth(data.accessToken, role, data.email ?? usuario, data.refreshToken);
+      navigate(ROLE_HOME[role] ?? '/ventas', { replace: true });
     } catch {
-      // Fallback: mock local mientras la API no está levantada
+      // Fallback mock mientras la API no está levantada
       const mock = MOCK_USERS[usuario.toLowerCase()];
       if (mock && mock.password === password) {
         setAuth('mock-token', mock.role, `${usuario}@marmolera.com`);
