@@ -13,7 +13,7 @@ export default function NuevoClienteModal({ onClose, onCreado }: Props) {
     nombreCompleto: '',
     telefono: '',
     direccion: '',
-    referencia: '',
+    nit_Ci: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -30,8 +30,9 @@ export default function NuevoClienteModal({ onClose, onCreado }: Props) {
       setLoading(true);
       const nuevo = await clientesService.crear(form);
       onCreado(nuevo.id);
-    } catch {
-      setError('Error al guardar el cliente. Verifica que la API esté activa.');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { mensaje?: string } } })?.response?.data?.mensaje;
+      setError(msg ?? 'Error al guardar el cliente.');
     } finally {
       setLoading(false);
     }
@@ -95,12 +96,12 @@ export default function NuevoClienteModal({ onClose, onCreado }: Props) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Referencia</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">NIT / CI</label>
             <input
               type="text"
-              value={form.referencia}
-              onChange={(e) => set('referencia', e.target.value)}
-              placeholder="Ej: Cerca al semaforo de la UV"
+              value={form.nit_Ci ?? ''}
+              onChange={(e) => set('nit_Ci', e.target.value)}
+              placeholder="Ej: 12345678"
               className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
             />
           </div>
