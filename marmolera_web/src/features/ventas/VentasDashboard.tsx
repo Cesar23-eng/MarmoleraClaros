@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { FileText, Users, TrendingUp, Search, UserPlus } from 'lucide-react';
 import type { CotizacionResponseDto, EstadoCotizacion, ClienteResponseDto } from '../../types/ventas';
 import { cotizacionesService } from './services/cotizacionesService';
-import { clientesService } from './services/clientesService';
 import { useClientes } from './hooks/useClientes';
 import EstadoBadge from './components/EstadoBadge';
 import NuevaCotizacionModal from './components/NuevaCotizacionModal';
@@ -25,15 +24,14 @@ export default function VentasDashboard() {
   const { clientes, recargar: recargarClientes } = useClientes();
 
   const [tab, setTab] = useState<Tab>('cotizaciones');
-  const [cotizaciones, setCotizaciones]         = useState<CotizacionResponseDto[]>([]);
-  const [loading, setLoading]                   = useState(true);
-  const [filtroEstado, setFiltroEstado]          = useState<EstadoCotizacion | 'Todos'>('Todos');
-  const [busqueda, setBusqueda]                  = useState('');
-  const [busquedaCliente, setBusquedaCliente]    = useState('');
-  const [modalNueva, setModalNueva]              = useState(false);
-  const [modalCliente, setModalCliente]          = useState(false);
-  const [cotizacionDetalle, setCotizacionDetalle] = useState<CotizacionResponseDto | null>(null);
-  const [clienteEditar, setClienteEditar]        = useState<ClienteResponseDto | null>(null);
+  const [cotizaciones, setCotizaciones]           = useState<CotizacionResponseDto[]>([]);
+  const [loading, setLoading]                     = useState(true);
+  const [filtroEstado, setFiltroEstado]            = useState<EstadoCotizacion | 'Todos'>('Todos');
+  const [busqueda, setBusqueda]                    = useState('');
+  const [busquedaCliente, setBusquedaCliente]      = useState('');
+  const [modalNueva, setModalNueva]                = useState(false);
+  const [modalCliente, setModalCliente]            = useState(false);
+  const [cotizacionDetalle, setCotizacionDetalle]  = useState<CotizacionResponseDto | null>(null);
 
   const cargarCotizaciones = async () => {
     try {
@@ -43,7 +41,7 @@ export default function VentasDashboard() {
         : await cotizacionesService.getMias();
       setCotizaciones(data);
     } catch {
-      /* silencioso en mock */
+      /* silencioso */
     } finally {
       setLoading(false);
     }
@@ -65,7 +63,6 @@ export default function VentasDashboard() {
     c.telefono.includes(busquedaCliente)
   );
 
-  // KPIs
   const totalCotizaciones = cotizaciones.length;
   const clientesUnicos    = new Set(cotizaciones.map((c) => c.cliente.id)).size;
   const totalVentas       = cotizaciones
@@ -100,8 +97,8 @@ export default function VentasDashboard() {
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { label: 'Cotizaciones',      value: totalCotizaciones, icon: FileText,   color: 'blue' },
-          { label: 'Clientes',          value: clientesUnicos,    icon: Users,      color: 'emerald' },
+          { label: 'Cotizaciones',      value: totalCotizaciones,           icon: FileText,   color: 'blue' },
+          { label: 'Clientes',          value: clientesUnicos,              icon: Users,      color: 'emerald' },
           { label: 'Facturado (Final)', value: `Bs ${totalVentas.toFixed(0)}`, icon: TrendingUp, color: 'violet' },
         ].map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="bg-white rounded-xl border border-slate-200 p-5 flex items-center gap-4">
@@ -199,9 +196,7 @@ export default function VentasDashboard() {
                       <td className="px-5 py-3.5 text-slate-500">
                         {new Date(c.fechaCreacion).toLocaleDateString('es-BO')}
                       </td>
-                      <td className="px-5 py-3.5">
-                        <EstadoBadge estado={c.estado} />
-                      </td>
+                      <td className="px-5 py-3.5"><EstadoBadge estado={c.estado} /></td>
                       <td className="px-5 py-3.5 text-right tabular-nums font-semibold text-slate-800">
                         Bs {c.precioTotal.toFixed(2)}
                       </td>
@@ -242,10 +237,7 @@ export default function VentasDashboard() {
             <div className="flex flex-col items-center justify-center h-52 gap-2 text-slate-400">
               <Users size={36} className="opacity-20" />
               <p className="text-sm">No hay clientes registrados.</p>
-              <button
-                onClick={() => setModalCliente(true)}
-                className="mt-1 text-sm text-blue-600 hover:underline font-medium"
-              >
+              <button onClick={() => setModalCliente(true)} className="mt-1 text-sm text-blue-600 hover:underline font-medium">
                 Crear el primer cliente
               </button>
             </div>
@@ -290,6 +282,7 @@ export default function VentasDashboard() {
       {cotizacionDetalle && (
         <DetalleCotizacionModal
           cotizacion={cotizacionDetalle}
+          clientes={clientes}
           onClose={() => setCotizacionDetalle(null)}
           onActualizada={() => { setCotizacionDetalle(null); cargarCotizaciones(); }}
         />

@@ -80,7 +80,6 @@ public class CotizacionesController(
         db.Cotizaciones.Add(cotizacion);
         await db.SaveChangesAsync();
 
-        // ★ DISPARADOR: notificar al Admin que hay una nueva cotización pendiente
         await notifSvc.CotizacionCreadaAsync(cotizacion.Id, cliente.NombreCompleto);
 
         return CreatedAtAction(nameof(ObtenerCotizacion),
@@ -92,6 +91,7 @@ public class CotizacionesController(
     //  PUT /api/cotizaciones/{id}
     // ══════════════════════════════════════════════════════════════════════
     [HttpPut("{id:int}")]
+    [Authorize(Roles = "Ventas,Admin")]
     [ProducesResponseType(typeof(CotizacionResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> EditarCotizacion(int id, [FromBody] CotizacionCreateDto dto)
     {
@@ -150,6 +150,30 @@ public class CotizacionesController(
     }
 
     // ══════════════════════════════════════════════════════════════════════
+    //  DELETE /api/cotizaciones/{id}  — solo estado "Cotizado"
+    // ══════════════════════════════════════════════════════════════════════
+    [HttpDelete("{id:int}")]
+    [Authorize(Roles = "Ventas,Admin")]
+    public async Task<IActionResult> EliminarCotizacion(int id)
+    {
+        var cotizacion = await db.Cotizaciones
+            .Include(c => c.Detalles)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+        if (cotizacion is null)
+            return NotFound(new { mensaje = $"Cotización con ID {id} no encontrada." });
+
+        if (cotizacion.Estado != "Cotizado")
+            return BadRequest(new { mensaje = $"Solo se pueden eliminar cotizaciones en estado 'Cotizado'. Estado actual: '{cotizacion.Estado}'." });
+
+        db.DetallesCotizacion.RemoveRange(cotizacion.Detalles);
+        db.Cotizaciones.Remove(cotizacion);
+        await db.SaveChangesAsync();
+
+        return Ok(new { mensaje = $"Cotización #{id} eliminada correctamente." });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
     //  GET /api/cotizaciones
     // ══════════════════════════════════════════════════════════════════════
     [HttpGet]
@@ -202,7 +226,6 @@ public class CotizacionesController(
 
     // ══════════════════════════════════════════════════════════════════════
     //  PUT /api/cotizaciones/{id}/aprobar
-    //  ★ Crea OrdenFabrica + notifica a Produccion y Tablet
     // ══════════════════════════════════════════════════════════════════════
     [HttpPut("{id:int}/aprobar")]
     [Authorize(Roles = "Ventas,Admin")]
@@ -233,11 +256,9 @@ public class CotizacionesController(
         }
 
         await db.SaveChangesAsync();
-
-        // ★ DISPARADOR: notificar a Fábrica que hay una orden nueva lista
         await notifSvc.CotizacionAprobadaAsync(id, cotizacion.Cliente!.NombreCompleto);
 
-        return Ok(new { mensaje = $"Cotización {id} aprobada. Orden de fábrica creada y visible en el tablero de producción." });
+        return Ok(new { mensaje = $"Cotización {id} aprobada. Orden de fábrica creada." });
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -259,7 +280,6 @@ public class CotizacionesController(
 
     // ══════════════════════════════════════════════════════════════════════
     //  PUT /api/cotizaciones/{id}/iniciar-produccion
-    //  ★ Sincroniza OrdenFabrica + notifica a Admin y Ventas
     // ══════════════════════════════════════════════════════════════════════
     [HttpPut("{id:int}/iniciar-produccion")]
     [Authorize(Roles = "Produccion,Admin")]
@@ -285,8 +305,6 @@ public class CotizacionesController(
         }
 
         await db.SaveChangesAsync();
-
-        // ★ DISPARADOR: notificar a Admin y Ventas que orden entró en producción
         await notifSvc.OrdenIniciadaAsync(orden?.Id ?? id, cotizacion.Cliente!.NombreCompleto);
 
         return Ok(new { mensaje = $"Cotización {id} pasó a 'En Producción'." });
@@ -328,7 +346,6 @@ public class CotizacionesController(
 
     // ══════════════════════════════════════════════════════════════════════
     //  PUT /api/cotizaciones/{id}/finalizar-produccion
-    //  ★ Sincroniza OrdenFabrica + notifica a Admin, Ventas y Contabilidad
     // ══════════════════════════════════════════════════════════════════════
     [HttpPut("{id:int}/finalizar-produccion")]
     [Authorize(Roles = "Produccion,Admin")]
@@ -354,14 +371,12 @@ public class CotizacionesController(
         }
 
         await db.SaveChangesAsync();
-
-        // ★ DISPARADOR: notificar a Admin, Ventas y Contabilidad que orden finalizó
         await notifSvc.OrdenFinalizadaAsync(orden?.Id ?? id, cotizacion.Cliente!.NombreCompleto);
 
         return Ok(new { mensaje = $"Cotización {id} pasó a 'Finalizado'." });
     }
 
-    // ─── HELPERS ─────────────────────────────────────────────────────────────────
+    // ─── HELPERS ─────────────────────────────────────────────────────────────────────────────
     private static decimal CalcularArea(DetalleCotizacionCreateDto d) =>
         d.Geometria switch
         {
@@ -390,19 +405,29 @@ public class CotizacionesController(
     private static string SerializarMedidas(DetalleCotizacionCreateDto d) =>
         JsonSerializer.Serialize(new { d.LadoA, d.LadoB, LadoC = d.LadoC, Ancho = d.Ancho });
 
-    private static CotizacionResponseDto ToDto(Cotizacion c, Cliente cl) =>
-        new(
-            Id:              c.Id,
-            Comentarios:     c.Comentarios,
-            PrecioTotal:     c.PrecioTotal,
-            Estado:          c.Estado,
-            FechaCreacion:   c.FechaCreacion,
-            FechaAprobacion: c.FechaAprobacion,
-            Cliente: new ClienteResponseDto(cl.Id, cl.NombreCompleto, cl.Telefono,
-                                            cl.Direccion, cl.Nit_Ci, cl.FechaRegistro),
-            Detalles: c.Detalles.Select(d => new DetalleCotizacionResponseDto(
-                d.Id, d.NombreMaterial, d.Geometria.ToString(),
-                d.MedidasJson, d.PrecioPorM2, d.AreaTotal, d.PrecioSubtotal
-            )).ToList()
-        );
+    private static CotizacionResponseDto ToDto(Cotizacion c, Cliente? cliente) => new(
+        c.Id,
+        c.Comentarios,
+        c.PrecioTotal,
+        c.Estado,
+        c.FechaCreacion,
+        c.FechaAprobacion,
+        new ClienteResponseDto(
+            cliente!.Id,
+            cliente.NombreCompleto,
+            cliente.Telefono,
+            cliente.Direccion,
+            cliente.Referencia,
+            cliente.NIT_CI
+        ),
+        c.Detalles.Select(d => new DetalleCotizacionResponseDto(
+            d.Id,
+            d.NombreMaterial,
+            d.Geometria.ToString(),
+            d.MedidasJson,
+            d.PrecioPorM2,
+            d.AreaTotal,
+            d.PrecioSubtotal
+        )).ToList()
+    );
 }
