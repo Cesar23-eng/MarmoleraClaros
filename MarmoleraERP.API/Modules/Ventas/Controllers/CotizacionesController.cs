@@ -417,8 +417,8 @@ public class CotizacionesController(
             cliente.NombreCompleto,
             cliente.Telefono,
             cliente.Direccion,
-            cliente.Referencia,
-            cliente.NIT_CI
+            cliente.Nit_Ci,
+            cliente.FechaRegistro
         ),
         c.Detalles.Select(d => new DetalleCotizacionResponseDto(
             d.Id,
