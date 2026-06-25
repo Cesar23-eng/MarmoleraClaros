@@ -20,25 +20,25 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
-    // ─── DbSets ─────────────────────────────────────────────────────────────────
-    public DbSet<Cliente>               Clientes              => Set<Cliente>();
-    public DbSet<Material>              Materiales            => Set<Material>();
-    public DbSet<ServicioExtra>         ServiciosExtras       => Set<ServicioExtra>();
-    public DbSet<Pedido>                Pedidos               => Set<Pedido>();
-    public DbSet<DetallePedidoGeometria> DetallesGeometria    => Set<DetallePedidoGeometria>();
-    public DbSet<DetallePedidoExtra>    DetallesExtras        => Set<DetallePedidoExtra>();
-    public DbSet<Cotizacion>            Cotizaciones          => Set<Cotizacion>();
-    public DbSet<DetalleCotizacion>     DetallesCotizacion    => Set<DetalleCotizacion>();
-    public DbSet<OrdenEscaneada>        OrdenesEscaneadas     => Set<OrdenEscaneada>();
-    public DbSet<EventoCalendario>      EventosCalendario     => Set<EventoCalendario>();
-    public DbSet<Notificacion>          Notificaciones        => Set<Notificacion>();
-    public DbSet<OrdenFabrica>          OrdenesFabrica        => Set<OrdenFabrica>();
+    // ─── DbSets ──────────────────────────────────────────────────────────────
+    public DbSet<Cliente>                Clientes           => Set<Cliente>();
+    public DbSet<Material>               Materiales         => Set<Material>();
+    public DbSet<ServicioExtra>          ServiciosExtras    => Set<ServicioExtra>();
+    public DbSet<Pedido>                 Pedidos            => Set<Pedido>();
+    public DbSet<DetallePedidoGeometria> DetallesGeometria  => Set<DetallePedidoGeometria>();
+    public DbSet<DetallePedidoExtra>     DetallesExtras     => Set<DetallePedidoExtra>();
+    public DbSet<Cotizacion>             Cotizaciones       => Set<Cotizacion>();
+    public DbSet<DetalleCotizacion>      DetallesCotizacion => Set<DetalleCotizacion>();
+    public DbSet<OrdenEscaneada>         OrdenesEscaneadas  => Set<OrdenEscaneada>();
+    public DbSet<EventoCalendario>       EventosCalendario  => Set<EventoCalendario>();
+    public DbSet<Notificacion>           Notificaciones     => Set<Notificacion>();
+    public DbSet<OrdenFabrica>           OrdenesFabrica     => Set<OrdenFabrica>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
 
-        // ─── Cliente ─────────────────────────────────────────────────────────────────
+        // ─── Cliente ─────────────────────────────────────────────────────────
         builder.Entity<Cliente>(e =>
         {
             e.HasKey(c => c.Id);
@@ -48,7 +48,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             e.Property(c => c.Nit_Ci).HasMaxLength(30);
         });
 
-        // ─── Material ────────────────────────────────────────────────────────────────
+        // ─── Material ────────────────────────────────────────────────────────
         builder.Entity<Material>(e =>
         {
             e.HasKey(m => m.Id);
@@ -57,7 +57,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             e.Property(m => m.PrecioPorM2).HasPrecision(18, 4);
         });
 
-        // ─── ServicioExtra ──────────────────────────────────────────────────────────
+        // ─── ServicioExtra ───────────────────────────────────────────────────
         builder.Entity<ServicioExtra>(e =>
         {
             e.HasKey(s => s.Id);
@@ -66,7 +66,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             e.Property(s => s.Precio).HasPrecision(18, 4);
         });
 
-        // ─── Pedido ────────────────────────────────────────────────────────────────
+        // ─── Pedido ──────────────────────────────────────────────────────────
         builder.Entity<Pedido>(e =>
         {
             e.HasKey(p => p.Id);
@@ -81,7 +81,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
              .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ─── DetallePedidoGeometria ───────────────────────────────────────────────────
+        // ─── DetallePedidoGeometria ───────────────────────────────────────────
         builder.Entity<DetallePedidoGeometria>(e =>
         {
             e.HasKey(d => d.Id);
@@ -104,7 +104,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
              .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ─── DetallePedidoExtra ────────────────────────────────────────────────────────
+        // ─── DetallePedidoExtra ───────────────────────────────────────────────
         builder.Entity<DetallePedidoExtra>(e =>
         {
             e.HasKey(d => d.Id);
@@ -122,7 +122,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
              .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ─── Cotizacion ───────────────────────────────────────────────────────────────
+        // ─── Cotizacion ───────────────────────────────────────────────────────
         builder.Entity<Cotizacion>(e =>
         {
             e.HasKey(c => c.Id);
@@ -138,7 +138,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
              .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ─── DetalleCotizacion ──────────────────────────────────────────────────────────
+        // ─── DetalleCotizacion ────────────────────────────────────────────────
         builder.Entity<DetalleCotizacion>(e =>
         {
             e.HasKey(d => d.Id);
@@ -155,7 +155,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
              .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // ─── OrdenEscaneada ──────────────────────────────────────────────────────────────
+        // ─── OrdenEscaneada ───────────────────────────────────────────────────
         builder.Entity<OrdenEscaneada>(e =>
         {
             e.HasKey(o => o.Id);
@@ -170,7 +170,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
              .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // ─── EventoCalendario ──────────────────────────────────────────────────────────
+        // ─── EventoCalendario ─────────────────────────────────────────────────
         builder.Entity<EventoCalendario>(e =>
         {
             e.HasKey(ev => ev.Id);
@@ -178,25 +178,32 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             e.Property(ev => ev.Notas).HasMaxLength(500);
             e.Property(ev => ev.UsuarioId).IsRequired().HasMaxLength(450);
             e.Property(ev => ev.MotivoReprogramacion).HasMaxLength(500);
+            e.Property(ev => ev.EstadoVisita).HasMaxLength(20).HasDefaultValue("Pendiente");
 
             e.HasOne(ev => ev.Pedido)
              .WithMany()
              .HasForeignKey(ev => ev.PedidoId)
              .IsRequired(false)
              .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(ev => ev.Cotizacion)
+             .WithMany()
+             .HasForeignKey(ev => ev.CotizacionId)
+             .IsRequired(false)
+             .OnDelete(DeleteBehavior.SetNull);
         });
 
-        // ─── Notificacion ──────────────────────────────────────────────────────────────
+        // ─── Notificacion ─────────────────────────────────────────────────────
         builder.Entity<Notificacion>(e =>
         {
             e.HasKey(n => n.Id);
             e.Property(n => n.Tipo).HasConversion<string>().HasMaxLength(40);
             e.Property(n => n.Titulo).IsRequired().HasMaxLength(150);
             e.Property(n => n.Mensaje).IsRequired().HasMaxLength(500);
-            e.Property(n => n.RolDestino).IsRequired().HasMaxLength(50);  // ← corregido
+            e.Property(n => n.RolDestino).IsRequired().HasMaxLength(50);
         });
 
-        // ─── OrdenFabrica ──────────────────────────────────────────────────────────────
+        // ─── OrdenFabrica ─────────────────────────────────────────────────────
         builder.Entity<OrdenFabrica>(e =>
         {
             e.ToTable("OrdenesFabrica");
@@ -209,7 +216,6 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             e.Property(x => x.Notas).HasMaxLength(1000);
         });
 
-        // ─── Seed Roles ───────────────────────────────────────────────────────────────
         SeedRoles(builder);
     }
 
@@ -223,7 +229,6 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             new IdentityRole { Id = "4", Name = "Contabilidad", NormalizedName = "CONTABILIDAD" },
             new IdentityRole { Id = "5", Name = "Tablet",       NormalizedName = "TABLET" },
         };
-
         builder.Entity<IdentityRole>().HasData(roles);
     }
 }

@@ -1,9 +1,8 @@
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export type PlantillaGeometria = 'Rectangulo' | 'Forma_L' | 'Forma_U';
-
 export type EstadoCotizacion =
   | 'Cotizado'
+  | 'PendienteVisita'
   | 'Aprobado'
   | 'EnProduccion'
   | 'Finalizado';
@@ -11,58 +10,55 @@ export type EstadoCotizacion =
 // ─── Cliente ──────────────────────────────────────────────────────────────────
 
 export interface ClienteResponseDto {
-  id: number;
+  id:             number;
   nombreCompleto: string;
-  telefono: string;
-  direccion: string;
-  nit_Ci: string;
-  fechaRegistro: string;
+  telefono:       string;
+  direccion:      string;
+  nit_Ci:         string;
+  fechaRegistro:  string;
 }
 
 export interface ClienteCreateDto {
   nombreCompleto: string;
-  telefono: string;
-  direccion: string;
-  nit_Ci?: string;
+  telefono:       string;
+  direccion?:     string;
+  referencia?:    string;
+  nit_Ci?:        string;
 }
 
-// ─── Detalle Cotización ───────────────────────────────────────────────────────
+// ─── Detalle cotización ───────────────────────────────────────────────────────
+
+export type Geometria = 'Rectangulo' | 'Forma_L' | 'Forma_U';
 
 export interface DetalleCotizacionCreateDto {
   nombreMaterial: string;
-  geometria: PlantillaGeometria;
-  ladoA: number;
-  ladoB: number;
-  ladoC?: number;
-  ancho?: number;
-  precioPorM2: number;
+  geometria:      Geometria;
+  ladoA:          number;
+  ladoB:          number;
+  ladoC?:         number;
+  ancho?:         number;
+  precioPorM2:    number;
 }
 
 export interface DetalleCotizacionResponseDto {
-  id: number;
+  id:             number;
   nombreMaterial: string;
-  geometria: string;
-  medidasJson: string;
-  precioPorM2: number;
-  areaTotal: number;
+  geometria:      string;
+  medidasJson:    string;
+  precioPorM2:    number;
+  areaTotal:      number;
   precioSubtotal: number;
 }
 
 // ─── Cotización ───────────────────────────────────────────────────────────────
 
-export interface CotizacionCreateDto {
-  clienteId: number;
-  comentarios?: string;
-  detalles: DetalleCotizacionCreateDto[];
-}
-
 export interface CotizacionResponseDto {
-  id: number;
-  comentarios?: string;
-  precioTotal: number;
-  estado: EstadoCotizacion;
-  fechaCreacion: string;
-  fechaAprobacion?: string;
-  cliente: ClienteResponseDto;
-  detalles: DetalleCotizacionResponseDto[];
+  id:              number;
+  comentarios:     string | null;
+  precioTotal:     number;
+  estado:          EstadoCotizacion;
+  fechaCreacion:   string;
+  fechaAprobacion: string | null;
+  cliente:         ClienteResponseDto;
+  detalles:        DetalleCotizacionResponseDto[];
 }

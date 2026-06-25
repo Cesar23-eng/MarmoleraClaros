@@ -11,6 +11,8 @@ using MarmoleraERP.API.Modules.Fabrica.Entities;
 using MarmoleraERP.API.Modules.Fabrica.Enums;
 using MarmoleraERP.API.Modules.Notificaciones;
 using MarmoleraERP.API.Modules.Notificaciones.Services;
+using MarmoleraERP.API.Modules.Calendario.Entities;
+using MarmoleraERP.API.Modules.Calendario.Enums;
 
 namespace MarmoleraERP.API.Modules.Ventas.Controllers;
 
@@ -226,11 +228,14 @@ public class CotizacionesController(
 
     // ══════════════════════════════════════════════════════════════════════
     //  PUT /api/cotizaciones/{id}/aprobar
+    //  Body: { requiereMedicion: bool, fechaVisita?: string (ISO) }
     // ══════════════════════════════════════════════════════════════════════
     [HttpPut("{id:int}/aprobar")]
     [Authorize(Roles = "Ventas,Admin")]
-    public async Task<IActionResult> AprobarCotizacion(int id)
+    public async Task<IActionResult> AprobarCotizacion(int id, [FromBody] AprobarCotizacionDto dto)
     {
+        var usuarioId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+
         var cotizacion = await db.Cotizaciones
             .Include(c => c.Cliente)
             .FirstOrDefaultAsync(c => c.Id == id);
@@ -241,8 +246,92 @@ public class CotizacionesController(
         if (cotizacion.Estado != "Cotizado")
             return BadRequest(new { mensaje = $"Solo se pueden aprobar cotizaciones en estado 'Cotizado'. Estado actual: '{cotizacion.Estado}'." });
 
-        cotizacion.Estado          = "Aprobado";
+        // ── Estado según si requiere visita ──────────────────────────────────
+        cotizacion.Estado          = dto.RequiereMedicion ? "PendienteVisita" : "Aprobado";
         cotizacion.FechaAprobacion = DateTime.UtcNow;
+
+        // ── Crear visita de medición si aplica ───────────────────────────────
+        if (dto.RequiereMedicion)
+        {
+            var fechaVisita = dto.FechaVisita ?? DateTime.UtcNow.AddDays(3);
+            db.EventosCalendario.Add(new EventoCalendario
+            {
+                Titulo        = $"Visita medición — {cotizacion.Cliente!.NombreCompleto}",
+                Tipo          = TipoEvento.Medicion,
+                FechaInicio   = fechaVisita,
+                FechaFin      = fechaVisita.AddHours(2),
+                CotizacionId  = id,
+                UsuarioId     = usuarioId,
+                EstadoVisita  = "Pendiente",
+                Color         = "#f59e0b",
+                Notas         = dto.NotasVisita,
+                FechaCreacion = DateTime.UtcNow
+            });
+        }
+        else
+        {
+            // Sin visita → orden de fábrica directamente
+            var yaExiste = await db.OrdenesFabrica.AnyAsync(o => o.CotizacionId == id);
+            if (!yaExiste)
+            {
+                db.OrdenesFabrica.Add(new OrdenFabrica
+                {
+                    CotizacionId  = id,
+                    Estado        = EstadoOrden.PorIniciar,
+                    FechaCreacion = DateTime.UtcNow
+                });
+            }
+        }
+
+        await db.SaveChangesAsync();
+        await notifSvc.CotizacionAprobadaAsync(id, cotizacion.Cliente!.NombreCompleto);
+
+        var msg = dto.RequiereMedicion
+            ? $"Cotización {id} aprobada. Visita de medición agendada."
+            : $"Cotización {id} aprobada. Orden de fábrica creada.";
+
+        return Ok(new { mensaje = msg });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  PUT /api/cotizaciones/{id}/confirmar-visita
+    //  La arquitecta confirma o reprograma la fecha de su visita
+    // ══════════════════════════════════════════════════════════════════════
+    [HttpPut("{id:int}/confirmar-visita")]
+    [Authorize(Roles = "Ventas,Admin")]
+    public async Task<IActionResult> ConfirmarVisita(int id, [FromBody] ConfirmarVisitaDto dto)
+    {
+        var cotizacion = await db.Cotizaciones
+            .Include(c => c.Cliente)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+        if (cotizacion is null)
+            return NotFound(new { mensaje = $"Cotización {id} no encontrada." });
+
+        if (cotizacion.Estado != "PendienteVisita")
+            return BadRequest(new { mensaje = $"La cotización no está en estado 'PendienteVisita'." });
+
+        // Actualizar el evento de calendario
+        var evento = await db.EventosCalendario
+            .Where(e => e.CotizacionId == id && e.Tipo == TipoEvento.Medicion)
+            .OrderByDescending(e => e.FechaCreacion)
+            .FirstOrDefaultAsync();
+
+        if (evento is not null)
+        {
+            if (evento.FechaInicio != dto.FechaConfirmada)
+            {
+                evento.FechaOriginal        = evento.FechaInicio;
+                evento.FueReprogramado      = true;
+                evento.MotivoReprogramacion = dto.Motivo;
+            }
+            evento.FechaInicio   = dto.FechaConfirmada;
+            evento.FechaFin      = dto.FechaConfirmada.AddHours(2);
+            evento.EstadoVisita  = "Confirmada";
+        }
+
+        // La cotización pasa a Aprobado + se crea la orden de fábrica
+        cotizacion.Estado = "Aprobado";
 
         var yaExiste = await db.OrdenesFabrica.AnyAsync(o => o.CotizacionId == id);
         if (!yaExiste)
@@ -256,9 +345,38 @@ public class CotizacionesController(
         }
 
         await db.SaveChangesAsync();
-        await notifSvc.CotizacionAprobadaAsync(id, cotizacion.Cliente!.NombreCompleto);
+        return Ok(new { mensaje = $"Visita confirmada para {dto.FechaConfirmada:dd/MM/yyyy}. Orden de fábrica creada." });
+    }
 
-        return Ok(new { mensaje = $"Cotización {id} aprobada. Orden de fábrica creada." });
+    // ══════════════════════════════════════════════════════════════════════
+    //  GET /api/cotizaciones/visitas-pendientes
+    //  Para el panel de la arquitecta
+    // ══════════════════════════════════════════════════════════════════════
+    [HttpGet("visitas-pendientes")]
+    [Authorize(Roles = "Ventas,Admin")]
+    public async Task<IActionResult> ObtenerVisitasPendientes()
+    {
+        var visitas = await db.EventosCalendario
+            .Include(e => e.Cotizacion!)
+                .ThenInclude(c => c!.Cliente)
+            .Where(e => e.Tipo == TipoEvento.Medicion
+                     && (e.EstadoVisita == "Pendiente" || e.EstadoVisita == "Confirmada"))
+            .OrderBy(e => e.FechaInicio)
+            .Select(e => new VisitaResponseDto(
+                e.Id,
+                e.CotizacionId!.Value,
+                e.Cotizacion!.Cliente.NombreCompleto,
+                e.Cotizacion!.Cliente.Telefono,
+                e.Cotizacion!.Cliente.Direccion,
+                e.FechaInicio,
+                e.EstadoVisita,
+                e.Notas,
+                e.FueReprogramado,
+                e.FechaOriginal
+            ))
+            .ToListAsync();
+
+        return Ok(visitas);
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -376,7 +494,7 @@ public class CotizacionesController(
         return Ok(new { mensaje = $"Cotización {id} pasó a 'Finalizado'." });
     }
 
-    // ─── HELPERS ─────────────────────────────────────────────────────────────────────────────
+    // ─── HELPERS ──────────────────────────────────────────────────────────────
     private static decimal CalcularArea(DetalleCotizacionCreateDto d) =>
         d.Geometria switch
         {
@@ -387,7 +505,7 @@ public class CotizacionesController(
                 (d.LadoA * d.Ancho!.Value)
                 + ((d.LadoB - 2 * d.Ancho.Value) * d.Ancho.Value)
                 + (d.LadoC!.Value * d.Ancho.Value),
-            _ => throw new ArgumentOutOfRangeException(nameof(d.Geometria), $"Plantilla no reconocida: {d.Geometria}")
+            _ => throw new ArgumentOutOfRangeException(nameof(d.Geometria))
         };
 
     private static (bool valido, string? error) ValidarMedidas(DetalleCotizacionCreateDto d) =>

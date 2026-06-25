@@ -1,5 +1,6 @@
 import { apiClient } from '../../../core/api/apiClient';
 import type { CotizacionResponseDto } from '../../../types/ventas';
+import type { VisitaResponseDto } from '../../../types/visitas';
 
 const BASE = '/cotizaciones';
 
@@ -22,8 +23,14 @@ export const cotizacionesService = {
   eliminar: (id: number) =>
     apiClient.delete(`${BASE}/${id}`).then((r) => r.data),
 
-  aprobar: (id: number) =>
-    apiClient.put(`${BASE}/${id}/aprobar`).then((r) => r.data),
+  aprobar: (id: number, payload: { requiereMedicion: boolean; fechaVisita: string | null; notasVisita: string | null }) =>
+    apiClient.put(`${BASE}/${id}/aprobar`, payload).then((r) => r.data),
+
+  confirmarVisita: (id: number, payload: { fechaConfirmada: string; motivo: string | null }) =>
+    apiClient.put(`${BASE}/${id}/confirmar-visita`, payload).then((r) => r.data),
+
+  getVisitasPendientes: () =>
+    apiClient.get<VisitaResponseDto[]>(`${BASE}/visitas-pendientes`).then((r) => r.data),
 
   iniciarProduccion: (id: number) =>
     apiClient.put(`${BASE}/${id}/iniciar-produccion`).then((r) => r.data),
